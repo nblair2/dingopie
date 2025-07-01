@@ -1,6 +1,6 @@
 package main
 
-import "dingopie/cmd"
+import "dingopie/forge/outstation/cmd"
 
 func main() {
 	cmd.Execute()

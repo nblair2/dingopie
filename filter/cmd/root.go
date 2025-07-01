@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"dingopie/outstation"
+	"dingopie/filter/outstation"
 )
 
 var (
@@ -26,9 +26,7 @@ var (
               |\_/|           ) (
              /     \         ) ( )
             /_ ~ ~ _\      .:::::::.
-               \@/        ~\_______/~
-
-		`,
+               \@/        ~\_______/~`,
 		Run: func(cmd *cobra.Command, args []string) {},
 	}
 	srcAddr, dstAddr, key string
@@ -171,8 +169,4 @@ func init() {
 	outstationCmd.AddCommand(outstationReceiveCmd)
 
 	rootCmd.AddCommand(outstationCmd)
-}
-
-func initConfig() {
-
 }
