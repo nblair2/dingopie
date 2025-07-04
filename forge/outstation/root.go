@@ -8,58 +8,73 @@ import (
 )
 
 var (
-	key    string
-	port   uint16
-	file   bool
 	banner = `
  ▌▘        ▘    ▄▖▄▖▄▖▄▖▄▖  ▗▘    ▗   ▗   ▗ ▘    ▝▖
 ▛▌▌▛▌▛▌▛▌▛▌▌█▌▄▖▙▖▌▌▙▘▌ ▙▖  ▐ ▛▌▌▌▜▘▛▘▜▘▀▌▜▘▌▛▌▛▌ ▌
 ▙▌▌▌▌▙▌▙▌▙▌▌▙▖  ▌ ▙▌▌▌▙▌▙▖  ▐ ▙▌▙▌▐▖▄▌▐▖█▌▐▖▌▙▌▌▌ ▌
      ▄▌  ▌                  ▝▖                   ▗▘
+
 `
+	example = `  dingopie-forge-outstation -f /path/to/file.txt
+  dingopie-forge-outstation "my secret message inline" -p 20001 -k "onetimepad"`
+
+	file, key string
+	port      uint16
 
 	rootCmd = &cobra.Command{
-		Use:   "dingopie-forge-outstation {-file|-string}",
-		Short: "dingopie forge mode: creates its own DNP3 packets",
-		Long:  banner,
+		Use:     "dingopie-forge-outstation {\"my message\" | file.txt -f}",
+		Short:   "dingopie forge mode: creates its own DNP3 packets",
+		Long:    banner,
+		Example: example,
+		Args:    cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf(banner)
-			fmt.Printf("Running dingopie forge mode, as a DNP3 outstation (server)")
-			fmt.Printf(">> Settings:\n>>>> Port: %d\n>>>> Key : %s", port, key)
 
 			var (
 				data []byte
 				err  error
 			)
-			if file {
-				data, err = os.ReadFile(os.Args[0])
-				if err != nil {
-					fmt.Println("ERROR: Could not read file %s: %v",
-						os.Args[0], err)
-					return
-				}
-			} else {
-				data = []byte(os.Args[0])
+
+			fmt.Print(banner)
+			fmt.Print("Running dingopie forge mode, as a DNP3 outstation\n")
+			fmt.Printf(">> Settings:\n>>>> Port: %d\n", port)
+			if key != "" {
+				fmt.Printf(">>>> Key : %s", key)
 			}
 
-			RunServer(port, key, data)
+			if file != "" {
+				data, err = os.ReadFile(file)
+				fmt.Printf(">>>> File: %s\n", file)
+				if err != nil {
+					fmt.Printf("ERROR: Could not read file %s: %v",
+						file, err)
+					return
+				}
+			} else if len(args) > 0 {
+				data = []byte(args[0])
+			} else {
+				fmt.Print("ERROR: Must provide either file with -f" +
+					" or string positional\n")
+				return
+			}
+
+			// Encrypt data
+
+			err = RunServer(port, data)
+			if err != nil {
+				fmt.Printf("ERROR: server exited with error: %v\n", err)
+				return
+			}
 
 			fmt.Println("DONE!")
 		},
 	}
 )
 
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
-}
-
 func init() {
 	cobra.EnableCommandSorting = false
 
-	rootCmd.PersistentFlags().BoolVarP(&file, "-file", "-f", false,
-		"read data from a file (default is false, read from command line)")
+	rootCmd.PersistentFlags().StringVarP(&file, "file", "f", "",
+		"file to read data from (default is read from command line)")
 	rootCmd.PersistentFlags().Uint16VarP(&port, "port", "p", 20000,
 		"port to listen for DNP3 connections on")
 	rootCmd.PersistentFlags().StringVarP(&key, "key", "k", "",
@@ -70,5 +85,7 @@ func init() {
 }
 
 func main() {
-	Execute()
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

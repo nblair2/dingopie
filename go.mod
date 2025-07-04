@@ -6,7 +6,7 @@ require (
 	github.com/coreos/go-iptables v0.8.0
 	github.com/florianl/go-nfqueue v1.3.2
 	github.com/google/gopacket v1.1.19
-	github.com/nblair2/go-dnp3 v0.0.0-20250701024439-23dfcb51f2b1
+	github.com/nblair2/go-dnp3 v0.0.0-20250704180052-44043ce4baa0
 	github.com/spf13/cobra v1.9.1
 )
 
