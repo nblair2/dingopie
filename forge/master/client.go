@@ -3,26 +3,29 @@ package main
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"time"
 
 	"github.com/nblair2/go-dnp3/dnp3"
 )
 
-func RunClient(addr string, port uint16) ([]byte, error) {
+func RunClient(addr string, port uint16, wait float32) ([]byte, error) {
 	var (
 		data []byte
-		src  uint16 = 1
-		dst  uint16 = 10
-		tSeq uint8  = 1
-		aSeq uint8  = 2
-		wait int    = 1
+		tSeq uint8 = uint8(rand.Intn(63))
+		aSeq uint8 = uint8(rand.Intn(15))
 	)
-	const CHUNK_SIZE = 4 // assuming G30V2, 32 bit
+	const (
+		HEADER_EXTRA = 5 // Assume G30 V3, must match client
+		// DNP3 addresses. Should mirror the other side of channel
+		SRC uint16 = 1
+		dst uint16 = 10
+	)
 
 	fmt.Print(">> Starting DNP3 master client\n")
 
-	p, err := createDNP3ApplicationRequest(src, dst, tSeq, aSeq)
+	p, err := createDNP3ApplicationRequest(SRC, dst, tSeq, aSeq)
 	if err != nil {
 		return nil,
 			fmt.Errorf("creating DNP3 Application Request Packet: %w", err)
@@ -75,6 +78,7 @@ func RunClient(addr string, port uint16) ([]byte, error) {
 				fmt.Printf(">>>> Error decoding bytes %v, continuing\n", err)
 			} else {
 				new := d.Application.LayerPayload()
+				new = new[HEADER_EXTRA:] // Hack to remove G/V/Q
 				data = append(data, new...)
 				fmt.Printf(">>>> Received %d bytes\n", len(new))
 			}
@@ -85,8 +89,6 @@ func RunClient(addr string, port uint16) ([]byte, error) {
 
 		time.Sleep(time.Duration(wait) * time.Second)
 	}
-
-	return data, fmt.Errorf("this should be unreachable")
 }
 
 func createDNP3ApplicationRequest(src, dst uint16, tSeq, aSeq uint8) (dnp3.DNP3, error) {
@@ -99,6 +101,14 @@ func createDNP3ApplicationRequest(src, dst uint16, tSeq, aSeq uint8) (dnp3.DNP3,
 		return dnp3.DNP3{},
 			fmt.Errorf("application sequence number is only 4 bits, got %d",
 				aSeq)
+	}
+
+	// HACK to make legitimate traffic polling classes 1230
+	appReqBytes := []byte{
+		0x3c, 0x02, 0x06, // class 1
+		0x3c, 0x03, 0x06, // class 2
+		0x3c, 0x04, 0x06, // class 3
+		0x3C, 0x01, 0x06, // class 0
 	}
 
 	return dnp3.DNP3{
@@ -126,7 +136,8 @@ func createDNP3ApplicationRequest(src, dst uint16, tSeq, aSeq uint8) (dnp3.DNP3,
 				UNS: false,
 				SEQ: aSeq,
 			},
-			FC: 0x01,
+			FC:  0x01, // Read
+			Raw: appReqBytes,
 		},
 	}, nil
 

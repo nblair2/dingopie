@@ -22,14 +22,12 @@ In filter mode, dingopie 'rides on top of' an existing DNP3 channel. It will int
 
 ## Status
 
-### vAlpha - forge, windows
+### vBeta - forge (est 30 July 2025)
 
-* [ ] cli
-* [ ] DNP3 packet creation and sequence tracking
-* [ ] variable throughput
-* [ ] encryption
-
-### vBeta - forge (both)
+* [ ] add encryption
+* [ ] clean up padded bytes on receipt
+* [ ] figure out close of connection from client side
+* [ ] add jitter to size of data sent (not all exact same size)
 
 ### v0.5 - filter linux
 

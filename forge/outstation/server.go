@@ -3,31 +3,35 @@ package main
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 
 	"github.com/nblair2/go-dnp3/dnp3"
 )
 
-func RunServer(port uint16, data []byte) error {
+func RunServer(port uint16, data []byte, chunks int) error {
 	var (
 		// expose some of these to user?
-		src    uint16 = 10
-		dst    uint16 = 1
-		tSeq   uint8  = 6
-		aSeq   uint8  = 7
-		offset int    = 0
-		chunks int    = 10
+		tSeq   uint8 = uint8(rand.Intn(63))
+		aSeq   uint8 = uint8(rand.Intn(15))
+		offset int   = 0
 	)
-	const CHUNK_SIZE = 4 // assuming G30V2, 32 bit
+	const (
+		CHUNK_SIZE = 4 // assuming Group 30, Variation 03
+		// DNP3 addresses. Should mirror the other side of channel
+		SRC uint16 = 10
+		DST uint16 = 1
+	)
 
 	fmt.Println(">> Starting DNP3 outstation server")
 
-	p, err := createDNP3ApplicationResponse(src, dst, tSeq, aSeq)
+	p, err := createDNP3ApplicationResponse(SRC, DST, tSeq, aSeq)
 	if err != nil {
 		return fmt.Errorf("creating DNP3 Application Response Packet: %w", err)
 	}
 
 	data = padData(data, chunks*CHUNK_SIZE)
+	size := len(data)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -75,14 +79,15 @@ func RunServer(port uint16, data []byte) error {
 			end := offset + chunks*CHUNK_SIZE
 			// with padding above this should not need to be checked
 			block := data[offset:end]
-			p.Application.SetContents(block)
+			objs := createDNP3ApplicationData(block)
+			p.Application.SetContents(objs)
 
 			// Send
 			_, err = conn.Write(p.ToBytes())
 			if err != nil {
 				fmt.Printf(">>>> Error sending bytes %v, continuing\n", err)
 			} else {
-				fmt.Printf(">>>> Sent bytes %d : %d\n", offset, end)
+				fmt.Printf(">>>> Sent bytes %d:%d / %d\n", offset, end, size)
 				offset = end
 			}
 
@@ -176,4 +181,20 @@ func padData(data []byte, chunk int) []byte {
 	padded := make([]byte, length+pad)
 	copy(padded, data)
 	return padded
+}
+
+// Hard coding for DNP3 G30 V3 (32 bit analog input w/o flag)
+// Structure is: 1 byte G, 1 byte V, 1 byte qualifier 2 byte start index, 2 byte stop index,
+func createDNP3ApplicationData(data []byte) []byte {
+	var o []byte
+	const CHUNK_SIZE = 4
+	data = padData(data, CHUNK_SIZE)
+	stop := (len(data) / CHUNK_SIZE) - 1
+	o = append(o, 0x1E)       // Group 30
+	o = append(o, 0x03)       // Variation 3
+	o = append(o, 0x00)       // Qualifier Fields 0 (its complex...)
+	o = append(o, 0x00)       // Start Index
+	o = append(o, byte(stop)) // Stop Index
+	o = append(o, data...)    // finally our data
+	return o
 }
