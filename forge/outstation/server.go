@@ -1,120 +1,137 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
 	"net"
 
 	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/schollz/progressbar/v3"
+
+	"dingopie/forge/common"
 )
 
-func RunServer(port uint16, data []byte, chunks int) error {
-	var (
-		// expose some of these to user?
-		tSeq   uint8 = uint8(rand.Intn(63))
-		aSeq   uint8 = uint8(rand.Intn(15))
-		offset int   = 0
-	)
-	const (
-		CHUNK_SIZE = 4 // assuming Group 30, Variation 03
-		// DNP3 addresses. Should mirror the other side of channel
-		SRC uint16 = 10
-		DST uint16 = 1
-	)
+type Server struct {
+	resp     dnp3.DNP3
+	listener net.Listener
+	conn     net.Conn
+}
 
-	fmt.Println(">> Starting DNP3 outstation server")
-
-	p, err := createDNP3ApplicationResponse(SRC, DST, tSeq, aSeq)
-	if err != nil {
-		return fmt.Errorf("creating DNP3 Application Response Packet: %w", err)
-	}
-
-	data = padData(data, chunks*CHUNK_SIZE)
-	size := len(data)
+func NewServer(port uint16) (*Server, error) {
+	s := &Server{}
+	s.resp = newApplicationResponse()
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		return fmt.Errorf("error starting server: %w", err)
+		return nil, fmt.Errorf("error starting server: %w", err)
 	}
-	defer listener.Close()
-	fmt.Printf(">>>> Listening on %s\n", listener.Addr())
+	s.listener = listener
 
-	conn, err := listener.Accept()
+	conn, err := s.listener.Accept()
 	if err != nil {
-		fmt.Printf(">>>> Error accepting connection: %v, continuing\n", err)
+		return nil, fmt.Errorf("error accepting connection: %v", err)
 	}
-	fmt.Printf(">>>> Connection from %s\n", conn.RemoteAddr())
-	defer conn.Close()
+	s.conn = conn
+
+	return s, nil
+}
+
+func (s *Server) RunServer(data []byte, chunk int) error {
+	var offset int = 0
+	size := len(data)
+	data = padData(data, chunk)
+
 	req := make([]byte, 1024)
 
+	// bar := progressbar.Default(int64(size), ">> Sending data:")
+	bar := progressbar.NewOptions(size,
+		progressbar.OptionSetDescription(">> Sending data:"),
+		progressbar.OptionSetTheme(progressbar.ThemeASCII),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetItsString("bits"),
+		progressbar.OptionSetPredictTime(true),
+		progressbar.OptionClearOnFinish(),
+	)
+
 	for {
-		n, err := conn.Read(req)
+		n, err := s.conn.Read(req)
 		if err != nil {
 			if err != io.EOF {
-				fmt.Printf(
-					">>>> Error reading from %s, %v, continuing\n",
-					conn.RemoteAddr(), err)
+				fmt.Printf(">>>> Error reading from %s, %v, (continuing)\n",
+					s.conn.RemoteAddr(), err)
+			} else {
+				return fmt.Errorf("connection closed by remote")
 			}
-
-			return fmt.Errorf("connection closed by remote")
 		}
 
-		// If correct knock, send back next block of data
-		if checkDNP3ApplicationRequest(req[:n]) {
+		d, err := decodeRequest(req[:n])
+		if err != nil {
+			fmt.Printf(">>>> could not decode request: %v (continuing)\n", err)
+		}
 
-			// Update packet
-			tSeq = (tSeq + 1) % 0b00111111
-			aSeq = (aSeq + 1) % 0b00001111
-
-			p.Transport.SEQ = tSeq
-			err = p.Application.SetSequence(aSeq)
+		p := d.Application.LayerPayload()
+		if bytes.Equal(p, common.REQ_SIZE) {
+			err := s.sendData(binary.LittleEndian.AppendUint64(nil, uint64(size)))
 			if err != nil {
-				fmt.Printf(">>>> Error updating app seq: %v, continuing\n",
-					err)
-				aSeq = 0
-				p.Application.SetSequence(aSeq)
+				fmt.Printf(">>>> Error sending size: %v (continuing)\n", err)
+				continue
 			}
-
-			end := offset + chunks*CHUNK_SIZE
-			// with padding above this should not need to be checked
-			block := data[offset:end]
-			objs := createDNP3ApplicationData(block)
-			p.Application.SetContents(objs)
-
-			// Send
-			_, err = conn.Write(p.ToBytes())
+		} else if bytes.Equal(p, common.REQ_DATA) {
+			err := s.sendData(data[offset : offset+chunk])
 			if err != nil {
-				fmt.Printf(">>>> Error sending bytes %v, continuing\n", err)
-			} else {
-				fmt.Printf(">>>> Sent bytes %d:%d / %d\n", offset, end, size)
-				offset = end
+				fmt.Printf(">>>> Error sending data: %v (continuing)\n", err)
+				continue
 			}
-
+			offset += chunk
+			bar.Add(chunk)
 		} else {
-			fmt.Println(">>>> Error, did not get DNP3ApplicationRequest" +
-				"from connection, continuing")
+			fmt.Println(">>>> request type unknown (continuing)")
 		}
 
 		if offset >= len(data) {
-			fmt.Println(">> All data sent, closing down")
+			bar.Finish()
+			fmt.Println(">> Sent all data")
 			return nil
 		}
 	}
 }
 
-func createDNP3ApplicationResponse(src, dst uint16, transSeq, appSeq uint8) (dnp3.DNP3, error) {
-	if transSeq > 0b00111111 {
-		return dnp3.DNP3{},
-			fmt.Errorf("transport sequence number is only 6 bits, got %d",
-				transSeq)
+func (s *Server) Close() error {
+	if s.conn != nil {
+		err := s.conn.Close()
+		if err != nil {
+			return fmt.Errorf("error closing connection: %w", err)
+		}
 	}
-	if appSeq > 0b00001111 {
-		return dnp3.DNP3{},
-			fmt.Errorf("application sequence number is only 4 bits, got %d",
-				appSeq)
+	if s.listener != nil {
+		err := s.listener.Close()
+		if err != nil {
+			return fmt.Errorf("error closing listener: %w", err)
+		}
 	}
+	return nil
+}
 
+func (s *Server) sendData(data []byte) error {
+	common.UpdateSequences(&s.resp)
+
+	num := (len(data) / common.DNP3_OBJ_SIZE) - 1
+	out := append(common.RESP_OBJ_HEADER, byte(num))
+	out = append(out, data...)
+
+	s.resp.Application.SetContents(out)
+	_, err := s.conn.Write(s.resp.ToBytes())
+	if err != nil {
+		return fmt.Errorf("error sending response: %w", err)
+	}
+	return nil
+}
+
+func newApplicationResponse() dnp3.DNP3 {
 	return dnp3.DNP3{
 		DataLink: dnp3.DNP3DataLink{
 			CTL: dnp3.DNP3DataLinkControl{
@@ -122,15 +139,15 @@ func createDNP3ApplicationResponse(src, dst uint16, transSeq, appSeq uint8) (dnp
 				PRM: true,
 				FCB: false,
 				FCV: false,
-				FC:  4, //Unconfirmed user data
+				FC:  common.DL_CTL_FC,
 			},
-			DST: dst,
-			SRC: src,
+			DST: common.MASTER_ADDR,
+			SRC: common.OUTSTATION_ADDR,
 		},
 		Transport: dnp3.DNP3Transport{
 			FIN: true,
 			FIR: true,
-			SEQ: transSeq,
+			SEQ: uint8(rand.Intn(63)),
 		},
 		Application: &dnp3.DNP3ApplicationResponse{
 			CTL: dnp3.DNP3ApplicationControl{
@@ -138,36 +155,11 @@ func createDNP3ApplicationResponse(src, dst uint16, transSeq, appSeq uint8) (dnp
 				FIN: true,
 				CON: false,
 				UNS: false,
-				SEQ: appSeq,
+				SEQ: uint8(rand.Intn(15)),
 			},
-			FC:  0x81,
+			FC:  common.APP_RESP_FC,
 			IIN: dnp3.DNP3ApplicationIIN{}, // All IIN set to 0
 		},
-	}, nil
-}
-
-func checkDNP3ApplicationRequest(b []byte) bool {
-	var d dnp3.DNP3
-	err := d.DecodeFromBytes(b)
-	if err != nil {
-		return false
-	} else if d.DataLink.SRC != 1 || d.DataLink.DST != 10 {
-		return false
-	} else if !d.Transport.FIR || !d.Transport.FIN {
-		return false
-	}
-
-	switch a := d.Application.(type) {
-	case *dnp3.DNP3ApplicationRequest:
-		if !a.CTL.FIR || !a.CTL.FIN {
-			return false
-		} else if a.FC != 0x01 {
-			return false
-		} else {
-			return true
-		}
-	default:
-		return false
 	}
 }
 
@@ -183,18 +175,31 @@ func padData(data []byte, chunk int) []byte {
 	return padded
 }
 
-// Hard coding for DNP3 G30 V3 (32 bit analog input w/o flag)
-// Structure is: 1 byte G, 1 byte V, 1 byte qualifier 2 byte start index, 2 byte stop index,
-func createDNP3ApplicationData(data []byte) []byte {
-	var o []byte
-	const CHUNK_SIZE = 4
-	data = padData(data, CHUNK_SIZE)
-	stop := (len(data) / CHUNK_SIZE) - 1
-	o = append(o, 0x1E)       // Group 30
-	o = append(o, 0x03)       // Variation 3
-	o = append(o, 0x00)       // Qualifier Fields 0 (its complex...)
-	o = append(o, 0x00)       // Start Index
-	o = append(o, byte(stop)) // Stop Index
-	o = append(o, data...)    // finally our data
-	return o
+func decodeRequest(b []byte) (*dnp3.DNP3, error) {
+	var d dnp3.DNP3
+	err := d.DecodeFromBytes(b)
+	if err != nil {
+		return nil, fmt.Errorf("could not decode: %w", err)
+	} else if d.DataLink.SRC != common.MASTER_ADDR ||
+		d.DataLink.DST != common.OUTSTATION_ADDR {
+		return nil, fmt.Errorf("got wrong src/dst")
+	} else if !d.Transport.FIR || !d.Transport.FIN {
+		return nil, fmt.Errorf("transport not first and last")
+	} else if d.DataLink.CTL.FC != common.DL_CTL_FC {
+		return nil, fmt.Errorf("data link function code is not %#x, got %#x",
+			common.DL_CTL_FC, d.DataLink.CTL.FC)
+	}
+
+	switch a := d.Application.(type) {
+	case *dnp3.DNP3ApplicationRequest:
+		if !a.CTL.FIR || !a.CTL.FIN {
+			return nil, fmt.Errorf("app not first and last")
+		} else if a.FC != common.APP_REQ_FC {
+			return nil, fmt.Errorf("app function code is not %#x, got %#x",
+				common.APP_REQ_FC, a.FC)
+		}
+		return &d, nil
+	}
+
+	return nil, fmt.Errorf("not a DNP3 Application Response")
 }

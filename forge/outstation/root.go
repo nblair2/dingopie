@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"dingopie/forge/common"
 )
 
 var (
@@ -29,46 +31,8 @@ var (
 		Long:    banner + long,
 		Example: example,
 		Args:    cobra.MaximumNArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-
-			var (
-				data []byte
-				err  error
-			)
-
-			fmt.Print(banner)
-			fmt.Print("Running dingopie forge mode, as a DNP3 outstation\n")
-			fmt.Printf(">> Settings:\n>>>> Port: %d\n", port)
-			fmt.Printf(">>>> Objects: %d (x4 bytes each)\n", objects)
-			if key != "" {
-				fmt.Printf(">>>> Key : %s", key)
-			}
-
-			if file != "" {
-				data, err = os.ReadFile(file)
-				fmt.Printf(">>>> File: %s\n", file)
-				if err != nil {
-					fmt.Printf("ERROR: Could not read file %s: %v",
-						file, err)
-					return
-				}
-			} else if len(args) > 0 {
-				data = []byte(args[0])
-			} else {
-				fmt.Print("ERROR: Must provide either file with -f" +
-					" or string positional\n")
-				return
-			}
-
-			// Encrypt data from password
-
-			err = RunServer(port, data, objects)
-			if err != nil {
-				fmt.Printf("ERROR: server exited with error: %v\n", err)
-				return
-			}
-
-			fmt.Println("DONE!")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRoot(args)
 		},
 	}
 )
@@ -90,8 +54,52 @@ func init() {
 
 }
 
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+func runRoot(args []string) error {
+	var chunk int = common.DNP3_OBJ_SIZE * objects
+
+	data, err := setup(args)
+	if err != nil {
+		return fmt.Errorf("error setting up: %w", err)
 	}
+
+	if key != "" {
+		data = common.XORData(key, data)
+	}
+
+	s, err := NewServer(port)
+	if err != nil {
+		return fmt.Errorf("error creating server: %w", err)
+	}
+
+	err = s.RunServer(data, chunk)
+	if err != nil {
+		return fmt.Errorf("error running server: %w", err)
+	}
+
+	s.Close()
+	fmt.Println("\nDONE!")
+	return nil
+}
+
+func setup(args []string) ([]byte, error) {
+	fmt.Print(banner)
+	fmt.Print("Running dingopie forge mode, as a DNP3 outstation\n")
+	fmt.Printf(">> Settings:\n>>>> Port: %d\n", port)
+	fmt.Printf(">>>> Objects: %d (x4 bytes each)\n", objects)
+	if key != "" {
+		fmt.Printf(">>>> Key : %s\n", key)
+	}
+
+	if file != "" {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return nil, fmt.Errorf("could not read file %s: %v", file, err)
+		}
+		fmt.Printf(">>>> File: %s\n", file)
+		return data, nil
+	} else if len(args) > 0 {
+		return []byte(args[0]), nil
+	}
+
+	return nil, fmt.Errorf("must provide -f file or string positional")
 }

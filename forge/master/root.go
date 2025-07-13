@@ -1,11 +1,15 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
+	"time"
 
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
+
+	"dingopie/forge/common"
 )
 
 var (
@@ -19,7 +23,6 @@ var (
 	long    = "This chicanery brought to you by the Camp George West Computer Club"
 	example = `  dingopie-forge-master 1.2.3.4
   dingopie-forge-master 1.2.3.4 -p 20001 -f out.txt -k "password"`
-
 	key, file string
 	port      uint16
 	wait      float32
@@ -30,56 +33,8 @@ var (
 		Long:    banner + long,
 		Example: example,
 		Args:    cobra.ExactArgs(1),
-		Run: func(cmd *cobra.Command, args []string) {
-			var writer io.Writer
-
-			fmt.Print(banner)
-			fmt.Print("Running dingopie forge mode, as a DNP3 master\n")
-			fmt.Printf(">>Settings:\n>>>> Addr: %s\n", args[0])
-			fmt.Printf(">>>> Port: %d\n>>>> Wait: %f seconds\n", port, wait)
-			if key != "" {
-				fmt.Printf(">>>> Key : %s", key)
-			}
-
-			if file != "" {
-				fmt.Printf(">>>> File: %s\n", file)
-				f, err := os.Create(file)
-				if err != nil {
-					fmt.Printf("ERROR: Failed to create file %s, %v\n",
-						file, err)
-					return
-				}
-				defer f.Close()
-				writer = f
-			} else {
-				fmt.Print(">>>> Output to stdio\n")
-				writer = os.Stdout
-			}
-
-			data, err := RunClient(args[0], port, wait)
-			if err != nil {
-				fmt.Printf("ERROR: Running client: %v", err)
-				return
-			}
-
-			// Decrypt data from password
-
-			if writer == os.Stdout {
-				fmt.Print("Message: ")
-			}
-
-			n, err := writer.Write(data)
-			if err != nil {
-				fmt.Printf("ERROR: Failed to write %d bytes to writer %s: %v",
-					n, writer, err)
-				return
-			}
-
-			if writer == os.Stdout {
-				fmt.Print("\n")
-			}
-
-			fmt.Println("DONE!")
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runRoot(args)
 		},
 	}
 )
@@ -100,8 +55,110 @@ func init() {
 	rootCmd.PersistentFlags().SortFlags = false
 }
 
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+func runRoot(args []string) error {
+	var data []byte
+	addr := args[0]
+
+	err := setup(addr)
+	if err != nil {
+		return fmt.Errorf("error setting up: %w", err)
 	}
+
+	client, err := NewClient(addr, port)
+	if err != nil {
+		return fmt.Errorf("failed to connect to server %s:%d: %v",
+			addr, port, err)
+	}
+
+	// First ask for the data len
+	sizeData, err := client.GetData(common.REQ_SIZE)
+	if err != nil {
+		return fmt.Errorf("failed getting data length from server: %v", err)
+	}
+	//bad integer stuff
+	size := int(binary.LittleEndian.Uint64(sizeData))
+
+	bar := progressbar.NewOptions(size,
+		progressbar.OptionSetDescription(">> Receiving data:"),
+		progressbar.OptionSetTheme(progressbar.ThemeASCII),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetItsString("bits"),
+		progressbar.OptionSetPredictTime(true),
+		progressbar.OptionClearOnFinish(),
+	)
+
+	for len(data) < size {
+
+		time.Sleep(time.Duration(wait) * time.Second)
+
+		newData, err := client.GetData(common.REQ_DATA)
+		if err != nil {
+			fmt.Printf(">> failed getting next data: %v (continuing)\n", err)
+		} else {
+			data = append(data, newData...)
+			bar.Add(len(newData))
+		}
+	}
+	client.Close()
+	bar.Finish()
+	fmt.Println(">> Received all data")
+
+	// Remove padding
+	if len(data) > size {
+		data = data[:size]
+	}
+	if key != "" {
+		fmt.Printf("\n>> Decrypting data...\n")
+		data = common.XORData(key, data)
+	}
+
+	err = writeOut(data)
+	if err != nil {
+		return fmt.Errorf("failed to write out message: %v", err)
+	}
+	fmt.Println("DONE!")
+	return nil
+}
+
+func setup(addr string) error {
+
+	fmt.Print(banner)
+	fmt.Print("Running dingopie forge mode, as a DNP3 master\n")
+	fmt.Printf(">> Settings:\n>>>> Addr: %s\n", addr)
+	fmt.Printf(">>>> Port: %d\n>>>> Wait: %f seconds\n", port, wait)
+
+	if key != "" {
+		fmt.Printf(">>>> Key : %s\n", key)
+	}
+
+	if file != "" {
+		_, err := os.Stat(file)
+		if err != nil {
+			return fmt.Errorf("failed to create file %s, %v", file, err)
+		}
+		fmt.Printf(">>>> File: %s\n", file)
+	} else {
+		fmt.Print(">>>> Output to stdio\n")
+	}
+
+	return nil
+}
+
+func writeOut(data []byte) error {
+	if file != "" {
+		writer, err := os.Create(file)
+		if err != nil {
+			return fmt.Errorf("failed to create file %s: %v", file, err)
+		}
+		defer writer.Close()
+
+		_, err = writer.Write(data)
+		if err != nil {
+			return fmt.Errorf("failed to write data to file %s: %v", file, err)
+		}
+	} else {
+		fmt.Println(">> Message: " + string(data))
+	}
+	return nil
 }

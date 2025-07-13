@@ -1,7 +1,7 @@
 GOOS    ?= linux
 GOARCH  ?= amd64
 BINDIR  ?= bin
-LDFLAGS ?= -ldflags="-s -w" # To make it harder to reverse
+LDFLAGS ?= -ldflags="-s -w" -trimpath# To make it harder to reverse
 
 
 ifeq ($(GOOS),windows)

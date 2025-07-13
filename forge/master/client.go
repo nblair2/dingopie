@@ -2,115 +2,66 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
-	"time"
 
 	"github.com/nblair2/go-dnp3/dnp3"
+
+	"dingopie/forge/common"
 )
 
-func RunClient(addr string, port uint16, wait float32) ([]byte, error) {
-	var (
-		data []byte
-		tSeq uint8 = uint8(rand.Intn(63))
-		aSeq uint8 = uint8(rand.Intn(15))
-	)
-	const (
-		HEADER_EXTRA = 5 // Assume G30 V3, must match client
-		// DNP3 addresses. Should mirror the other side of channel
-		SRC uint16 = 1
-		dst uint16 = 10
-	)
+type Client struct {
+	req  dnp3.DNP3
+	conn net.Conn
+}
 
-	fmt.Print(">> Starting DNP3 master client\n")
-
-	p, err := createDNP3ApplicationRequest(SRC, dst, tSeq, aSeq)
-	if err != nil {
-		return nil,
-			fmt.Errorf("creating DNP3 Application Request Packet: %w", err)
-	}
+func NewClient(addr string, port uint16) (*Client, error) {
+	c := &Client{}
+	c.req = newApplicationRequest()
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", addr, port))
 	if err != nil {
-		return nil,
-			fmt.Errorf("could not connect to to %s:%d: %w", addr, port, err)
+		return nil, fmt.Errorf("could not connect to to %s:%d: %w",
+			addr, port, err)
 	}
-	defer conn.Close()
-	fmt.Printf(">>>> Connected to %s\n", conn.RemoteAddr())
+	c.conn = conn
 
-	buf := make([]byte, 1024)
-
-	for {
-		// Update packet
-		tSeq = (tSeq + 1) % 0b00111111
-		aSeq = (aSeq + 1) % 0b00001111
-
-		p.Transport.SEQ = tSeq
-		err = p.Application.SetSequence(aSeq)
-		if err != nil {
-			fmt.Printf(">>>> Error updating app seq: %v, continuing\n",
-				err)
-			aSeq = 0
-			p.Application.SetSequence(aSeq)
-		}
-
-		// Send a knock
-		_, err := conn.Write(p.ToBytes())
-		if err != nil {
-			fmt.Printf(">>>> Error sending bytes %v, continuing\n", err)
-		} else {
-			fmt.Print(">>>> Sent DNP3ApplicationRequest\n")
-		}
-
-		// Read new data
-		n, err := conn.Read(buf)
-		if err != nil {
-			if err == io.EOF {
-				fmt.Printf(">> Got EOF from outstation, closing down\n")
-				return data, nil
-			}
-			fmt.Printf(">>>> Error reading bytes %v, continuing\n", err)
-		} else if checkDNP3ApplicationResponse(buf[:n]) {
-			d := dnp3.DNP3{}
-			err = d.DecodeFromBytes(buf[:n])
-			if err != nil {
-				fmt.Printf(">>>> Error decoding bytes %v, continuing\n", err)
-			} else {
-				new := d.Application.LayerPayload()
-				new = new[HEADER_EXTRA:] // Hack to remove G/V/Q
-				data = append(data, new...)
-				fmt.Printf(">>>> Received %d bytes\n", len(new))
-			}
-		} else {
-			fmt.Printf(">>>> Got bytes that were not a "+
-				"DNP3ApplicationResponse, continuing: 0x % X", buf[:n])
-		}
-
-		time.Sleep(time.Duration(wait) * time.Second)
-	}
+	return c, nil
 }
 
-func createDNP3ApplicationRequest(src, dst uint16, tSeq, aSeq uint8) (dnp3.DNP3, error) {
-	if tSeq > 0b00111111 {
-		return dnp3.DNP3{},
-			fmt.Errorf("transport sequence number is only 6 bits, got %d",
-				tSeq)
+func (c *Client) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
 	}
-	if aSeq > 0b00001111 {
-		return dnp3.DNP3{},
-			fmt.Errorf("application sequence number is only 4 bits, got %d",
-				aSeq)
+	return nil
+}
+
+func (c *Client) GetData(appData []byte) ([]byte, error) {
+	buf := make([]byte, 1024)
+	common.UpdateSequences(&c.req)
+	c.req.Application.SetContents(appData)
+
+	_, err := c.conn.Write(c.req.ToBytes())
+	if err != nil {
+		return nil, fmt.Errorf("error sending req: %w", err)
 	}
 
-	// HACK to make legitimate traffic polling classes 1230
-	appReqBytes := []byte{
-		0x3c, 0x02, 0x06, // class 1
-		0x3c, 0x03, 0x06, // class 2
-		0x3c, 0x04, 0x06, // class 3
-		0x3C, 0x01, 0x06, // class 0
+	n, err := c.conn.Read(buf)
+	if err != nil {
+		return nil, fmt.Errorf("error reading resp: %w", err)
 	}
 
+	d, err := decodeResponse(buf[:n])
+	if err != nil {
+		return nil, fmt.Errorf("got invalid response: %w", err)
+	}
+
+	data := d.Application.LayerPayload()
+	data = data[common.DNP3_OBJ_HEADER_SIZE:] // Hack to remove G/V/Q
+	return data, nil
+}
+
+func newApplicationRequest() dnp3.DNP3 {
 	return dnp3.DNP3{
 		DataLink: dnp3.DNP3DataLink{
 			CTL: dnp3.DNP3DataLinkControl{
@@ -118,15 +69,15 @@ func createDNP3ApplicationRequest(src, dst uint16, tSeq, aSeq uint8) (dnp3.DNP3,
 				PRM: true,
 				FCB: false,
 				FCV: false,
-				FC:  4, //Unconfirmed user data
+				FC:  common.DL_CTL_FC, //Unconfirmed user data
 			},
-			DST: dst,
-			SRC: src,
+			DST: common.OUTSTATION_ADDR,
+			SRC: common.MASTER_ADDR,
 		},
 		Transport: dnp3.DNP3Transport{
 			FIN: true,
 			FIR: true,
-			SEQ: tSeq,
+			SEQ: uint8(rand.Intn(63)),
 		},
 		Application: &dnp3.DNP3ApplicationRequest{
 			CTL: dnp3.DNP3ApplicationControl{
@@ -134,36 +85,39 @@ func createDNP3ApplicationRequest(src, dst uint16, tSeq, aSeq uint8) (dnp3.DNP3,
 				FIN: true,
 				CON: false,
 				UNS: false,
-				SEQ: aSeq,
+				SEQ: uint8(rand.Intn(15)),
 			},
-			FC:  0x01, // Read
-			Raw: appReqBytes,
+			FC: common.APP_REQ_FC, // Read
+			//Raw: []byte{}
 		},
-	}, nil
-
+	}
 }
 
-func checkDNP3ApplicationResponse(b []byte) bool {
+func decodeResponse(b []byte) (*dnp3.DNP3, error) {
 	var d dnp3.DNP3
 	err := d.DecodeFromBytes(b)
 	if err != nil {
-		return false
-	} else if d.DataLink.SRC != 10 || d.DataLink.DST != 1 {
-		return false
+		return nil, fmt.Errorf("could not decode from bytes: %w", err)
+	} else if d.DataLink.SRC != common.OUTSTATION_ADDR ||
+		d.DataLink.DST != common.MASTER_ADDR {
+		return nil, fmt.Errorf("got wrong src/dst")
 	} else if !d.Transport.FIR || !d.Transport.FIN {
-		return false
+		return nil, fmt.Errorf("transport not first and last")
+	} else if d.DataLink.CTL.FC != common.DL_CTL_FC {
+		return nil, fmt.Errorf("data link function code is not %#x, got %#x",
+			common.DL_CTL_FC, d.DataLink.CTL.FC)
 	}
 
 	switch a := d.Application.(type) {
 	case *dnp3.DNP3ApplicationResponse:
 		if !a.CTL.FIR || !a.CTL.FIN {
-			return false
-		} else if a.FC != 0x81 {
-			return false
-		} else {
-			return true
+			return nil, fmt.Errorf("app not first and last")
+		} else if a.FC != common.APP_RESP_FC {
+			return nil, fmt.Errorf("app function code is not %#x, got %#x",
+				common.APP_RESP_FC, a.FC)
 		}
-	default:
-		return false
+		return &d, nil
 	}
+
+	return nil, fmt.Errorf("not a DNP3 Application Response")
 }
