@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -21,14 +22,14 @@ var (
 
 `
 	long    = "This chicanery brought to you by the Camp George West Computer Club"
-	example = `  dingopie-forge-master 1.2.3.4
-  dingopie-forge-master 1.2.3.4 -p 20001 -f out.txt -k "password"`
+	example = `  dingopie-forge-client 1.2.3.4
+  dingopie-forge-client 1.2.3.4 -p 20001 -f out.txt -k "password"`
 	key, file string
 	port      uint16
 	wait      float32
 
 	rootCmd = &cobra.Command{
-		Use:     "dingopie-forge-master <outstation ip address>",
+		Use:     "dingopie-forge-client <server ip address>",
 		Short:   "dingopie forge mode: creates its own DNP3 packets",
 		Long:    banner + long,
 		Example: example,
@@ -44,11 +45,11 @@ func init() {
 
 	rootCmd.Flags().SortFlags = false
 	rootCmd.PersistentFlags().Uint16VarP(&port, "port", "p", 20000,
-		"port to connect to DNP3 outstation")
+		"port to connect to DNP3 server")
 	rootCmd.PersistentFlags().StringVarP(&key, "key", "k", "",
 		"encryption key (default is no encryption)")
 	rootCmd.PersistentFlags().Float32VarP(&wait, "wait", "w", 5.0,
-		"wait in seconds between polls to the outstation,"+
+		"wait in seconds between polls to the server,"+
 			" lower for increased bandwidth")
 	rootCmd.PersistentFlags().StringVarP(&file, "file", "f", "",
 		"file to write data to (default is write to command line)")
@@ -85,7 +86,7 @@ func runRoot(args []string) error {
 		progressbar.OptionShowIts(),
 		progressbar.OptionSetItsString("bits"),
 		progressbar.OptionSetPredictTime(true),
-		progressbar.OptionClearOnFinish(),
+		progressbar.OptionShowElapsedTimeOnFinish(),
 	)
 
 	for len(data) < size {
@@ -102,14 +103,13 @@ func runRoot(args []string) error {
 	}
 	client.Close()
 	bar.Finish()
-	fmt.Println(">> Received all data")
 
 	// Remove padding
 	if len(data) > size {
 		data = data[:size]
 	}
 	if key != "" {
-		fmt.Printf("\n>> Decrypting data...\n")
+		fmt.Println("\n>> Decrypting data")
 		data = common.XORData(key, data)
 	}
 
@@ -124,9 +124,9 @@ func runRoot(args []string) error {
 func setup(addr string) error {
 
 	fmt.Print(banner)
-	fmt.Print("Running dingopie forge mode, as a DNP3 master\n")
-	fmt.Printf(">> Settings:\n>>>> Addr: %s\n", addr)
-	fmt.Printf(">>>> Port: %d\n>>>> Wait: %f seconds\n", port, wait)
+	fmt.Print("Running dingopie forge mode, as a DNP3 client\n")
+	fmt.Printf(">> Settings:\n>>>> Addr  : %s\n", addr)
+	fmt.Printf(">>>> Port  : %d\n>>>> Wait  : %f seconds/request\n", port, wait)
 
 	if key != "" {
 		fmt.Printf(">>>> Key : %s\n", key)
@@ -134,12 +134,15 @@ func setup(addr string) error {
 
 	if file != "" {
 		_, err := os.Stat(file)
-		if err != nil {
-			return fmt.Errorf("failed to create file %s, %v", file, err)
+		if err == nil {
+			return fmt.Errorf("file %s already exists", file)
+		} else if errors.Is(err, os.ErrNotExist) {
+			fmt.Printf(">>>> File  : %s\n", file)
+		} else {
+			return fmt.Errorf("error checking file %s: %v", file, err)
 		}
-		fmt.Printf(">>>> File: %s\n", file)
 	} else {
-		fmt.Print(">>>> Output to stdio\n")
+		fmt.Print(">>>> Output: stdio\n")
 	}
 
 	return nil
@@ -158,7 +161,7 @@ func writeOut(data []byte) error {
 			return fmt.Errorf("failed to write data to file %s: %v", file, err)
 		}
 	} else {
-		fmt.Println(">> Message: " + string(data))
+		fmt.Println(">> Message:\n" + string(data))
 	}
 	return nil
 }

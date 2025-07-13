@@ -18,15 +18,15 @@ var (
 
 `
 	long    = "This chicanery brought to you by the Camp George West Computer Club"
-	example = `  dingopie-forge-outstation -f /path/to/file.txt
-  dingopie-forge-outstation "my secret message inline" -p 20001 -k "password"`
+	example = `  dingopie-forge-server -f /path/to/file.txt
+  dingopie-forge-server "my secret message inline" -p 20001 -k "password"`
 
 	file, key string
 	port      uint16
 	objects   int
 
 	rootCmd = &cobra.Command{
-		Use:     "dingopie-forge-outstation {\"my message\" | file.txt -f}",
+		Use:     "dingopie-forge-server {\"my message\" | file.txt -f}",
 		Short:   "dingopie forge mode: creates its own DNP3 packets",
 		Long:    banner + long,
 		Example: example,
@@ -63,6 +63,7 @@ func runRoot(args []string) error {
 	}
 
 	if key != "" {
+		fmt.Println(">> Encrypting data")
 		data = common.XORData(key, data)
 	}
 
@@ -77,17 +78,17 @@ func runRoot(args []string) error {
 	}
 
 	s.Close()
-	fmt.Println("\nDONE!")
+	fmt.Println("DONE!")
 	return nil
 }
 
 func setup(args []string) ([]byte, error) {
 	fmt.Print(banner)
 	fmt.Print("Running dingopie forge mode, as a DNP3 outstation\n")
-	fmt.Printf(">> Settings:\n>>>> Port: %d\n", port)
+	fmt.Printf(">> Settings:\n>>>> Port   : %d\n", port)
 	fmt.Printf(">>>> Objects: %d (x4 bytes each)\n", objects)
 	if key != "" {
-		fmt.Printf(">>>> Key : %s\n", key)
+		fmt.Printf(">>>> Key    : %s\n", key)
 	}
 
 	if file != "" {
@@ -95,7 +96,7 @@ func setup(args []string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not read file %s: %v", file, err)
 		}
-		fmt.Printf(">>>> File: %s\n", file)
+		fmt.Printf(">>>> File   : %s\n", file)
 		return data, nil
 	} else if len(args) > 0 {
 		return []byte(args[0]), nil

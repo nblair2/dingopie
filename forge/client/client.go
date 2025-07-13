@@ -26,6 +26,8 @@ func NewClient(addr string, port uint16) (*Client, error) {
 	}
 	c.conn = conn
 
+	fmt.Printf(">> Connected to %s\n", conn.RemoteAddr().String())
+
 	return c, nil
 }
 

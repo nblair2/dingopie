@@ -30,11 +30,14 @@ func NewServer(port uint16) (*Server, error) {
 	}
 	s.listener = listener
 
+	fmt.Printf(">> Listening on %s\n", listener.Addr().String())
+
 	conn, err := s.listener.Accept()
 	if err != nil {
 		return nil, fmt.Errorf("error accepting connection: %v", err)
 	}
 	s.conn = conn
+	fmt.Printf(">> New connection from %s\n", conn.RemoteAddr().String())
 
 	return s, nil
 }
@@ -54,7 +57,7 @@ func (s *Server) RunServer(data []byte, chunk int) error {
 		progressbar.OptionShowIts(),
 		progressbar.OptionSetItsString("bits"),
 		progressbar.OptionSetPredictTime(true),
-		progressbar.OptionClearOnFinish(),
+		progressbar.OptionShowElapsedTimeOnFinish(),
 	)
 
 	for {
@@ -94,7 +97,7 @@ func (s *Server) RunServer(data []byte, chunk int) error {
 
 		if offset >= len(data) {
 			bar.Finish()
-			fmt.Println(">> Sent all data")
+			fmt.Println("\n>> Closing server")
 			return nil
 		}
 	}

@@ -10,15 +10,15 @@ else
 	EXT = .bin
 endif
 
-.PHONY: all clean forge-outstation forge-master #filter-outstation filter-master
+.PHONY: all clean forge-server forge-client #filter-server filter-client
 
-all: forge-outstation forge-master #filter-outstation filter-master
+all: forge-server forge-client #filter-server filter-client
 
-forge-outstation:
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o "$(BINDIR)/dingopie-$@$(EXT)" ./forge/outstation/
+forge-server:
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o "$(BINDIR)/dingopie-$@$(EXT)" ./forge/server/
 
-forge-master:
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o "$(BINDIR)/dingopie-$@$(EXT)" ./forge/master/
+forge-client:
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o "$(BINDIR)/dingopie-$@$(EXT)" ./forge/client/
 
 clean:
 	@rm -rf $(BINDIR)/*
