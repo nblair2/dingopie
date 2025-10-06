@@ -25,7 +25,7 @@ sequenceDiagram
     participant ds as dingopie-server
 
     activate ds
-    ds-->>ds: Read filse / stdin
+    ds-->>ds: Read file / stdin
     ds-->>ds: Encrypt data (optional)
     ds-->>s: Open listener (configurable port)
     activate s

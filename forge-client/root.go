@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"dingopie/common"
+	common "dingopie/forge-common"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
@@ -33,7 +33,7 @@ var (
 		Long:    banner + long,
 		Example: example,
 		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return runRoot(args)
 		},
 	}
@@ -72,7 +72,7 @@ func runRoot(args []string) error {
 	}
 
 	// First ask for the data len
-	sizeData, err := client.GetData(common.REQ_SIZE)
+	sizeData, err := client.GetData(common.RequestSize)
 	if err != nil {
 		return fmt.Errorf("failed getting data length from server: %w", err)
 	}
@@ -93,7 +93,7 @@ func runRoot(args []string) error {
 	for len(data) < size {
 		time.Sleep(time.Duration(wait) * time.Second)
 
-		newData, err := client.GetData(common.REQ_DATA)
+		newData, err := client.GetData(common.RequestData)
 		if err != nil {
 			fmt.Printf(">> failed getting next data: %v (continuing)\n", err)
 		} else {

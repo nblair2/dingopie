@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"dingopie/common"
+	common "dingopie/forge-common"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,7 @@ var (
 		Short:   "dingopie forge mode: creates its own DNP3 packets",
 		Long:    banner + long,
 		Example: example,
-		Args: func(cmd *cobra.Command, args []string) error {
+		Args: func(_ *cobra.Command, args []string) error {
 			if file == "" && len(args) == 0 {
 				return errors.New("must provide -f file or string positional argument")
 			}
@@ -40,7 +40,7 @@ var (
 
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return runRoot(args)
 		},
 	}
@@ -63,7 +63,7 @@ func init() {
 }
 
 func runRoot(args []string) error {
-	chunk := common.DNP3_OBJ_SIZE * objects
+	chunk := common.DNP3ObjSize * objects
 
 	data, err := setup(args)
 	if err != nil {
@@ -76,17 +76,17 @@ func runRoot(args []string) error {
 		data = common.XORData(key, data)
 	}
 
-	s, err := NewServer(port)
+	server, err := NewServer(port)
 	if err != nil {
 		return fmt.Errorf("error creating server: %w", err)
 	}
 
-	err = s.RunServer(data, chunk)
+	err = server.RunServer(data, chunk)
 	if err != nil {
 		return fmt.Errorf("error running server: %w", err)
 	}
 
-	err = s.Close()
+	err = server.Close()
 	if err != nil {
 		return fmt.Errorf("error closing server: %w", err)
 	}

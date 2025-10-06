@@ -1,36 +1,50 @@
 GOOS    ?= linux
 GOARCH  ?= amd64
+EXT     ?= .bin
 BINDIR  ?= bin
 LDFLAGS ?= -ldflags="-s -w" -trimpath
 
+.PHONY: all forge forge-server forge-client clean clean-forge clean-forge-server clean-forge-client test test-forge hooks lint fix fmt help
 
-ifeq ($(GOOS),windows)
-	EXT = .exe
-else
-	EXT = .bin
-endif
+##
+##  ------------------------- Build and Clean ----------------------------
+##
 
-.PHONY: all forge forge-server forge-client clean clean-forge clean-forge-server clean-forge-client test test-forge
-
+# Build all binaries
 all: clean forge
 
+# Build binaries for forge mode
 forge: forge-server forge-client
 
+# Build individual binaries
 forge-server forge-client:
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o "$(BINDIR)/$@$(EXT)" ./$@/
+	@for OS in linux windows; do \
+	  EXT="$$([ "$$OS" = "windows" ] && echo ".exe" || echo ".bin")"; \
+	  GOOS=$$OS GOARCH=$(GOARCH) go build $(LDFLAGS) -o "$(BINDIR)/$@$$EXT" ./$@/; \
+	done
 
+# Clean all binaries
 clean: clean-forge
 
+# Clean forge binaries
 clean-forge: clean-forge-server clean-forge-client
 
+# Clean forge server binary
 clean-forge-server:
 	@rm -rf $(BINDIR)/forge-server*.*
 
+# Clean forge client binary
 clean-forge-client:
-	@rm -rf $(BINDIR)/forge-client*.*
+	@rm -rf $(BINDIR)/forge-client.*
 
+##
+## ------------------------- Tests ---------------------------------------
+##
+
+# Test all (linux only)
 test: test-forge
 
+# Test forge mode (server to client on localhost)
 test-forge: clean-forge forge
 	@echo "==> Starting test"
 	@rm -rf test/
@@ -52,3 +66,27 @@ test-forge: clean-forge forge
 	@echo "--> Cleaning up"
 	@rm -rf test/
 	@echo "==> Test complete"
+
+##
+## ------------------------- Developer tools -----------------------------
+##
+
+# Install repository provided git hooks
+hooks:
+	git config core.hooksPath .githooks
+
+# Run golangci-lint to check for errors
+lint:
+	@golangci-lint run ./...
+
+# Run golangci-lint to try to fix issues
+fix:
+	@golangci-lint run ./... --fix
+
+# Run golangci-lint to format code
+fmt:
+	@golangci-lint fmt ./...
+
+# Show this help
+help:
+	@cat $(MAKEFILE_LIST) | docker run --rm -i xanders/make-help

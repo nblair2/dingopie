@@ -1,4 +1,4 @@
-package common
+package forgecommon
 
 import (
 	"math/rand"
