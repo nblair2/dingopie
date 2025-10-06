@@ -41,6 +41,7 @@ sequenceDiagram
     s->>c: DNP3 Response
     c-->>dc: Size of data transfer
     loop Transfer data (configurable rate)
+        dc-->>dc: Wait x seconds (configurable)
         dc-->>c: Get next
         c->>s: DNP3 Request (Class 123)
         s-->>ds: Get next
@@ -65,7 +66,7 @@ sequenceDiagram
 
 ```
 Usage:
-  dingopie-forge-server {"my message" | file.txt -f} [flags]
+  dingopie-forge-server {"my message" | -f file.txt} [flags]
 
 Examples:
   dingopie-forge-server -f /path/to/file.txt
@@ -99,19 +100,8 @@ Flags:
 
 ### Filter
 
-:exclamation: NOTE :exclamation: DNP3 filter mode is not implemented. There is some basic code that got started to intercept packets on linux, but it is not complete.
+> [!NOTE] 
+> :exclamation: **filter mode is not implemented** :exclamation:
+> For a (very slow) POC, see the original [D1N0P13](https://github.com/nblair2/d1n0p13
 
 In filter mode, dingopie 'rides on top of' an existing DNP3 channel. It will intercept and add data to packets as they leave one host, and on the other side will intercept and remove this data before allowing the packets to continue on to the legitimate SCADA program. This will increase the size of packets sent between devices, but will take place over an existing DNP3 connection and is much less likely to be noticed. The disadvantage of filter mode is that its speed is constrained by the channel that it is using.
-
-## Status
-
-### vBeta - forge (est 30 July 2025)
-
-* [x] add encryption
-* [x] clean up padded bytes on receipt
-* [x] figure out close of connection from client side
-* [ ] add jitter to size of data sent (not all exact same size)
-
-### v0.5 - filter lin
-
-### v0.9 - filter lin + win

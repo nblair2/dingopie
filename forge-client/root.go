@@ -7,10 +7,9 @@ import (
 	"os"
 	"time"
 
+	"dingopie/common"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
-
-	"dingopie/forge/common"
 )
 
 var (
@@ -58,6 +57,7 @@ func init() {
 
 func runRoot(args []string) error {
 	var data []byte
+
 	addr := args[0]
 
 	err := setup(addr)
@@ -67,17 +67,18 @@ func runRoot(args []string) error {
 
 	client, err := NewClient(addr, port)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server %s:%d: %v",
+		return fmt.Errorf("failed to connect to server %s:%d: %w",
 			addr, port, err)
 	}
 
 	// First ask for the data len
 	sizeData, err := client.GetData(common.REQ_SIZE)
 	if err != nil {
-		return fmt.Errorf("failed getting data length from server: %v", err)
+		return fmt.Errorf("failed getting data length from server: %w", err)
 	}
-	//bad integer stuff
+	// bad integer stuff
 	size := int(binary.LittleEndian.Uint64(sizeData))
+	fmt.Printf(">> Expecting %d bytes\n", size)
 
 	bar := progressbar.NewOptions(size,
 		progressbar.OptionSetDescription(">> Receiving data:"),
@@ -90,7 +91,6 @@ func runRoot(args []string) error {
 	)
 
 	for len(data) < size {
-
 		time.Sleep(time.Duration(wait) * time.Second)
 
 		newData, err := client.GetData(common.REQ_DATA)
@@ -98,31 +98,42 @@ func runRoot(args []string) error {
 			fmt.Printf(">> failed getting next data: %v (continuing)\n", err)
 		} else {
 			data = append(data, newData...)
-			bar.Add(len(newData))
+			_ = bar.Add(len(newData))
 		}
 	}
-	client.Close()
-	bar.Finish()
+
+	err = client.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close client connection: %w", err)
+	}
+
+	err = bar.Finish()
+	if err != nil {
+		return fmt.Errorf("failed to finish progress bar: %w", err)
+	}
 
 	// Remove padding
 	if len(data) > size {
 		data = data[:size]
 	}
+
 	if key != "" {
-		fmt.Println("\n>> Decrypting data")
+		fmt.Print("\n>> Decrypting data")
+
 		data = common.XORData(key, data)
 	}
 
 	err = writeOut(data)
 	if err != nil {
-		return fmt.Errorf("failed to write out message: %v", err)
+		return fmt.Errorf("failed to write out message: %w", err)
 	}
-	fmt.Println("DONE!")
+
+	fmt.Println("\nDONE!")
+
 	return nil
 }
 
 func setup(addr string) error {
-
 	fmt.Print(banner)
 	fmt.Print("Running dingopie forge mode, as a DNP3 client\n")
 	fmt.Printf(">> Settings:\n>>>> Addr  : %s\n", addr)
@@ -139,7 +150,7 @@ func setup(addr string) error {
 		} else if errors.Is(err, os.ErrNotExist) {
 			fmt.Printf(">>>> File  : %s\n", file)
 		} else {
-			return fmt.Errorf("error checking file %s: %v", file, err)
+			return fmt.Errorf("error checking file %s: %w", file, err)
 		}
 	} else {
 		fmt.Print(">>>> Output: stdio\n")
@@ -152,16 +163,17 @@ func writeOut(data []byte) error {
 	if file != "" {
 		writer, err := os.Create(file)
 		if err != nil {
-			return fmt.Errorf("failed to create file %s: %v", file, err)
+			return fmt.Errorf("failed to create file %s: %w", file, err)
 		}
 		defer writer.Close()
 
 		_, err = writer.Write(data)
 		if err != nil {
-			return fmt.Errorf("failed to write data to file %s: %v", file, err)
+			return fmt.Errorf("failed to write data to file %s: %w", file, err)
 		}
 	} else {
 		fmt.Println(">> Message:\n" + string(data))
 	}
+
 	return nil
 }
