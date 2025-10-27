@@ -1,9 +1,9 @@
-package forgecommon
+package forge
 
 const (
 	// DNP3 Data.
-	DNP3MasterAddress     = 1
-	DNP3OutstationAddress = 10
+	DNP3MasterAddress     = 1    // Master addr
+	DNP3OutstationAddress = 10   // Outstation addr
 	UnconfirmedUserDataFC = 4    // Unconfirmed user data
 	ApplicationRequestFC  = 0x01 // Read
 	ApplicationResponseFC = 0x81 // Read response

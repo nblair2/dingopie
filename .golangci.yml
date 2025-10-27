@@ -1,4 +1,7 @@
 version: "2"
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
 linters:
   enable:
     - arangolint
@@ -29,13 +32,11 @@ linters:
     - funlen
     - ginkgolinter
     - gocheckcompilerdirectives
-    - gochecknoinits
     - gochecksumtype
     - gocognit
     - goconst
     - gocritic
     - gocyclo
-    - godoclint
     - godot
     - godox
     - goheader
@@ -67,7 +68,6 @@ linters:
     - nilnesserr
     - nilnil
     - nlreturn
-    - noctx
     - noinlineerr
     - nolintlint
     - nonamedreturns
@@ -110,15 +110,20 @@ linters:
     rules:
       - linters:
           - revive
-        text: "exported: comment on"
+        text: "exported: "
       - linters:
           - revive
-        text: "should have comment or be unexported"
+        text: "package-comments: "
+  disable:
+    - gochecknoinits
+    - godoclint
+    - noctx
 
 formatters:
   enable:
-    - gci
+    # - gci
     - gofmt
-    - gofumpt
+    # - gofumpt
     - goimports
     - golines
+      

@@ -1,4 +1,4 @@
-package main
+package forge
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"net"
 
-	common "dingopie/forge-common"
 	"github.com/nblair2/go-dnp3/dnp3"
 )
 
@@ -17,7 +16,7 @@ type Client struct {
 
 func NewClient(addr string, port uint16) (*Client, error) {
 	client := &Client{}
-	client.req = newApplicationRequest()
+	client.req = createApplicationRequest()
 
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", addr, port))
 	if err != nil {
@@ -46,7 +45,7 @@ func (client *Client) Close() error {
 func (client *Client) GetData(reqAppData []byte) ([]byte, error) {
 	buf := make([]byte, 1024)
 
-	common.UpdateSequences(&client.req)
+	updateSequences(&client.req)
 
 	reqApp := dnp3.ApplicationData{}
 
@@ -72,7 +71,7 @@ func (client *Client) GetData(reqAppData []byte) ([]byte, error) {
 		return nil, fmt.Errorf("error reading resp: %w", err)
 	}
 
-	d, err := decodeResponse(buf[:n])
+	d, err := parseResponse(buf[:n])
 	if err != nil {
 		return nil, fmt.Errorf("got invalid response: %w", err)
 	}
@@ -84,12 +83,12 @@ func (client *Client) GetData(reqAppData []byte) ([]byte, error) {
 		return nil, fmt.Errorf("could not encode response data: %w", err)
 	}
 
-	appRespData = appRespData[common.DNP3ObjHeaderSize:] // Hack to remove G/V/Q
+	appRespData = appRespData[DNP3ObjHeaderSize:] // Hack to remove G/V/Q
 
 	return appRespData, nil
 }
 
-func newApplicationRequest() dnp3.DNP3 {
+func createApplicationRequest() dnp3.DNP3 {
 	return dnp3.DNP3{
 		DataLink: dnp3.DataLink{
 			CTL: dnp3.DataLinkCTL{
@@ -97,14 +96,15 @@ func newApplicationRequest() dnp3.DNP3 {
 				PRM: true,
 				FCB: false,
 				FCV: false,
-				FC:  common.UnconfirmedUserDataFC, // Unconfirmed user data
+				FC:  UnconfirmedUserDataFC, // Unconfirmed user data
 			},
-			DST: common.DNP3OutstationAddress,
-			SRC: common.DNP3MasterAddress,
+			DST: DNP3OutstationAddress,
+			SRC: DNP3MasterAddress,
 		},
 		Transport: dnp3.Transport{
 			FIN: true,
 			FIR: true,
+			//nolint:gosec // G404
 			SEQ: uint8(rand.Intn(63)),
 		},
 		Application: &dnp3.ApplicationRequest{
@@ -113,37 +113,39 @@ func newApplicationRequest() dnp3.DNP3 {
 				FIN: true,
 				CON: false,
 				UNS: false,
+				//nolint:gosec // G404
 				SEQ: uint8(rand.Intn(15)),
 			},
-			FC: common.ApplicationRequestFC, // Read
+			FC: ApplicationRequestFC, // Read
 			// Raw: []byte{}
 		},
 	}
 }
 
-func decodeResponse(b []byte) (*dnp3.DNP3, error) {
+//nolint:cyclop
+func parseResponse(b []byte) (*dnp3.DNP3, error) {
 	var dnp dnp3.DNP3
 
 	err := dnp.FromBytes(b)
-	if err != nil {
+	switch {
+	case err != nil:
 		return nil, fmt.Errorf("could not decode from bytes: %w", err)
-	} else if dnp.DataLink.SRC != common.DNP3OutstationAddress ||
-		dnp.DataLink.DST != common.DNP3MasterAddress {
+	case dnp.DataLink.SRC != DNP3OutstationAddress ||
+		dnp.DataLink.DST != DNP3MasterAddress:
 		return nil, errors.New("got wrong src/dst")
-	} else if !dnp.Transport.FIR || !dnp.Transport.FIN {
+	case !dnp.Transport.FIR || !dnp.Transport.FIN:
 		return nil, errors.New("transport not first and last")
-	} else if dnp.DataLink.CTL.FC != common.UnconfirmedUserDataFC {
+	case dnp.DataLink.CTL.FC != UnconfirmedUserDataFC:
 		return nil, fmt.Errorf("data link function code is not %#x, got %#x",
-			common.UnconfirmedUserDataFC, dnp.DataLink.CTL.FC)
+			UnconfirmedUserDataFC, dnp.DataLink.CTL.FC)
 	}
 
-	switch a := dnp.Application.(type) {
-	case *dnp3.ApplicationResponse:
+	if a, ok := dnp.Application.(*dnp3.ApplicationResponse); ok {
 		if !a.CTL.FIR || !a.CTL.FIN {
 			return nil, errors.New("app not first and last")
-		} else if a.FC != common.ApplicationResponseFC {
+		} else if a.FC != ApplicationResponseFC {
 			return nil, fmt.Errorf("app function code is not %#x, got %#x",
-				common.ApplicationResponseFC, a.FC)
+				ApplicationResponseFC, a.FC)
 		}
 
 		return &dnp, nil

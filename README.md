@@ -8,6 +8,9 @@
  /_ ~ ~ _\  ▙▌▌▌▌▙▌▙▌▙▌▌▙▖  .:::::::.
     \@/          ▄▌  ▌     ~\_______/~
 ```
+
+dingopie is a DNP3 covert channel
+
 ## Modes
 
 ### Forge
@@ -64,38 +67,42 @@ sequenceDiagram
 
 #### Forge Server (outstation)
 
+The forge server acts as a DNP3 outstation, waiting for a client to connect and poll for data.
+
 ```
 Usage:
-  dingopie-forge-server {"my message" | -f file.txt} [flags]
+  dingopie forge server [flags]
 
 Examples:
   dingopie-forge-server -f /path/to/file.txt
   dingopie-forge-server "my secret message inline" -p 20001 -k "password"
 
 Flags:
-  -f, --file string   file to read data from (default is read from command line)
-  -p, --port uint16   port to listen for DNP3 connections on (default 20000)
+  -f, --file string   file to read data from (default is command line)
+  -h, --help          help for server
   -k, --key string    encryption key (default is no encryption)
   -o, --objects int   number of 32bit objects to send in each response. Higher for increased bandwidth (default 10)
-  -h, --help          help for dingopie-forge-server
+  -p, --port uint16   port to listen on (default 20000)
 ```
 
 #### Forge Client (master)
 
+The forge client acts as a DNP3 master, connecting to a server and pulling data from it.
+
 ```
 Usage:
-  dingopie-forge-client <server ip address> [flags]
+  dingopie forge client [flags]
 
 Examples:
-  dingopie-forge-client 1.2.3.4
-  dingopie-forge-client 1.2.3.4 -p 20001 -f out.txt -k "password"
+  dingopie forge client 1.2.3.4
+  dingopie forge client 1.2.3.4 -p 20001 -f out.txt -k "password"
 
 Flags:
-  -p, --port uint16    port to connect to DNP3 server (default 20000)
+  -f, --file string    file to write data to (default is to stdout)
+  -h, --help           help for client
   -k, --key string     encryption key (default is no encryption)
+  -p, --port uint16    port to connect to (default is 20000) (default 20000)
   -w, --wait float32   wait in seconds between polls to the server, lower for increased bandwidth (default 5)
-  -f, --file string    file to write data to (default is write to command line)
-  -h, --help           help for dingopie-forge-client
 ```
 
 ### Filter

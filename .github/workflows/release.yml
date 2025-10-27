@@ -21,16 +21,12 @@ jobs:
       - name: Download Go modules
         run: go mod download
       - name: Build binaries
-        run: make all
-      - name: Archive binaries
-        run: |
-          mkdir -p artifacts
-          cp bin/* artifacts/
+        run: make build
       - name: Upload binaries as artifact
         uses: actions/upload-artifact@v3
         with:
           name: binaries
-          path: artifacts
+          path: bin
 
   release:
     name: Run release-please
