@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/nblair2/dingopie/compare/v1.0.1...v1.0.2) (2025-10-27)
+
+
+### Bug Fixes
+
+* ci release with assets ([7680e20](https://github.com/nblair2/dingopie/commit/7680e204eb387fbddb0f6c49f38af9cf1d9088c8))
+* ci release with assets ([5639c25](https://github.com/nblair2/dingopie/commit/5639c254ae290727d43176a951075cbc59d1b40c))
+
 ## [1.0.1](https://github.com/nblair2/dingopie/compare/v1.0.0...v1.0.1) (2025-10-27)
 
 
