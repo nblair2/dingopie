@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/nblair2/dingopie/compare/v1.0.0...v1.0.1) (2025-10-27)
+
+
+### Bug Fixes
+
+* ci release upload with token ([22e26d2](https://github.com/nblair2/dingopie/commit/22e26d2a7d3be43be0aa8dfa63440db7118566f1))
+* ci release upload with token ([4dace15](https://github.com/nblair2/dingopie/commit/4dace157d9b83f19bf6b36edd4d92cc61b45ad3d))
+
 ## [1.0.0](https://github.com/nblair2/dingopie/compare/v0.1.0...v1.0.0) (2025-10-27)
 
 
