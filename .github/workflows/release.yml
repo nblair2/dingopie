@@ -41,6 +41,8 @@ jobs:
           release-type: go
       - name: Upload release artifact
         if: ${{ steps.release.outputs.release_created }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ steps.release.outputs.tag_name }} bin/dingopie.exe
           gh release upload ${{ steps.release.outputs.tag_name }} bin/dingopie.bin
