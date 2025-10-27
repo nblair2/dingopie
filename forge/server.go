@@ -1,4 +1,4 @@
-package main
+package forge
 
 import (
 	"bytes"
@@ -9,8 +9,7 @@ import (
 	"math/rand"
 	"net"
 
-	"dingopie/common"
-	dnp3 "github.com/nblair2/go-dnp3/dnp3"
+	"github.com/nblair2/go-dnp3/dnp3"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -21,29 +20,30 @@ type Server struct {
 }
 
 func NewServer(port uint16) (*Server, error) {
-	s := &Server{}
-	s.resp = newApplicationResponse()
+	server := &Server{}
+	server.resp = newApplicationResponse()
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, fmt.Errorf("error starting server: %w", err)
 	}
 
-	s.listener = listener
+	server.listener = listener
 
 	fmt.Printf(">> Listening on %s\n", listener.Addr().String())
 
-	conn, err := s.listener.Accept()
+	conn, err := server.listener.Accept()
 	if err != nil {
 		return nil, fmt.Errorf("error accepting connection: %w", err)
 	}
 
-	s.conn = conn
+	server.conn = conn
 	fmt.Printf(">> New connection from %s\n", conn.RemoteAddr().String())
 
-	return s, nil
+	return server, nil
 }
 
+//nolint:cyclop,funlen
 func (s *Server) RunServer(data []byte, chunk int) error {
 	offset := 0
 	size := len(data)
@@ -63,7 +63,7 @@ func (s *Server) RunServer(data []byte, chunk int) error {
 	)
 
 	for {
-		n, err := s.conn.Read(req)
+		num, err := s.conn.Read(req)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				fmt.Printf(">>>> Error reading from %s, %v, (continuing)\n",
@@ -73,29 +73,30 @@ func (s *Server) RunServer(data []byte, chunk int) error {
 			}
 		}
 
-		d, err := decodeRequest(req[:n])
+		d, err := decodeRequest(req[:num])
 		if err != nil {
 			fmt.Printf(">>>> could not decode request: %v (continuing)\n", err)
 		}
 
 		appData := d.Application.GetData()
 
-		p, err := (&appData).ToBytes()
+		payload, err := (&appData).ToBytes()
 		if err != nil {
 			fmt.Printf(">>>> could not encode request data: %v (continuing)\n", err)
 
 			continue
 		}
 
-		if bytes.Equal(p, common.REQ_SIZE) {
-			err := s.sendData(binary.LittleEndian.AppendUint64(nil, uint64(size)))
+		switch {
+		case bytes.Equal(payload, RequestSize):
+			err := s.SendData(binary.LittleEndian.AppendUint64(nil, uint64(size)))
 			if err != nil {
 				fmt.Printf(">>>> Error sending size: %v (continuing)\n", err)
 
 				continue
 			}
-		} else if bytes.Equal(p, common.REQ_DATA) {
-			err := s.sendData(data[offset : offset+chunk])
+		case bytes.Equal(payload, RequestData):
+			err := s.SendData(data[offset : offset+chunk])
 			if err != nil {
 				fmt.Printf(">>>> Error sending data: %v (continuing)\n", err)
 
@@ -104,7 +105,7 @@ func (s *Server) RunServer(data []byte, chunk int) error {
 
 			offset += chunk
 			_ = bar.Add(chunk)
-		} else {
+		default:
 			fmt.Println(">>>> request type unknown (continuing)")
 		}
 
@@ -139,12 +140,13 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func (s *Server) sendData(data []byte) error {
-	common.UpdateSequences(&s.resp)
-	num := (len(data) / common.DNP3_OBJ_SIZE) - 1
+func (s *Server) SendData(data []byte) error {
+	updateSequences(&s.resp)
+
+	num := (len(data) / DNP3ObjSize) - 1
 	appData := dnp3.ApplicationData{}
 
-	err := appData.FromBytes(append(append(common.RESP_OBJ_HEADER, byte(num)), data...))
+	err := appData.FromBytes(append(append(ResponseObjectHeader, byte(num)), data...))
 	if err != nil {
 		return fmt.Errorf("could not decode response data: %w", err)
 	}
@@ -172,14 +174,15 @@ func newApplicationResponse() dnp3.DNP3 {
 				PRM: true,
 				FCB: false,
 				FCV: false,
-				FC:  common.DL_CTL_FC,
+				FC:  UnconfirmedUserDataFC,
 			},
-			DST: common.MASTER_ADDR,
-			SRC: common.OUTSTATION_ADDR,
+			DST: DNP3MasterAddress,
+			SRC: DNP3OutstationAddress,
 		},
 		Transport: dnp3.Transport{
 			FIN: true,
 			FIR: true,
+			//nolint:gosec // G404
 			SEQ: uint8(rand.Intn(63)),
 		},
 		Application: &dnp3.ApplicationResponse{
@@ -188,9 +191,10 @@ func newApplicationResponse() dnp3.DNP3 {
 				FIN: true,
 				CON: false,
 				UNS: false,
+				//nolint:gosec // G404
 				SEQ: uint8(rand.Intn(15)),
 			},
-			FC:  common.APP_RESP_FC,
+			FC:  ApplicationResponseFC,
 			IIN: dnp3.ApplicationIIN{}, // All IIN set to 0
 		},
 	}
@@ -210,33 +214,34 @@ func padData(data []byte, chunk int) []byte {
 	return padded
 }
 
+//nolint:cyclop
 func decodeRequest(b []byte) (*dnp3.DNP3, error) {
-	var d dnp3.DNP3
+	var dnp dnp3.DNP3
 
-	err := d.FromBytes(b)
-	if err != nil {
+	err := dnp.FromBytes(b)
+	switch {
+	case err != nil:
 		return nil, fmt.Errorf("could not decode: %w", err)
-	} else if d.DataLink.SRC != common.MASTER_ADDR ||
-		d.DataLink.DST != common.OUTSTATION_ADDR {
+	case dnp.DataLink.SRC != DNP3MasterAddress ||
+		dnp.DataLink.DST != DNP3OutstationAddress:
 		return nil, errors.New("got wrong src/dst")
-	} else if !d.Transport.FIR || !d.Transport.FIN {
+	case !dnp.Transport.FIR || !dnp.Transport.FIN:
 		return nil, errors.New("transport not first and last")
-	} else if d.DataLink.CTL.FC != common.DL_CTL_FC {
+	case dnp.DataLink.CTL.FC != UnconfirmedUserDataFC:
 		return nil, fmt.Errorf("data link function code is not %#x, got %#x",
-			common.DL_CTL_FC, d.DataLink.CTL.FC)
-	} else if d.Application == nil {
+			UnconfirmedUserDataFC, dnp.DataLink.CTL.FC)
+	case dnp.Application == nil:
 		return nil, errors.New("no application layer")
-	} else if d.Application.GetFunctionCode() != common.APP_REQ_FC {
+	case dnp.Application.GetFunctionCode() != ApplicationRequestFC:
 		return nil, fmt.Errorf("app function code is not %#x, got %#x",
-			common.APP_REQ_FC, d.Application.GetFunctionCode())
-	} else if !d.Application.GetCTL().FIR || !d.Application.GetCTL().FIN {
+			ApplicationRequestFC, dnp.Application.GetFunctionCode())
+	case !dnp.Application.GetCTL().FIR || !dnp.Application.GetCTL().FIN:
 		return nil, errors.New("app not first and last")
 	}
 
-	switch d.Application.(type) {
-	case *dnp3.ApplicationRequest:
-		return &d, nil
+	if _, ok := dnp.Application.(*dnp3.ApplicationRequest); ok {
+		return &dnp, nil
 	}
 
-	return nil, errors.New("not a DNP3 Application Response")
+	return nil, errors.New("not a DNP3 Application Request")
 }

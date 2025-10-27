@@ -1,0 +1,58 @@
+name: release
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.24.4
+      - name: Download Go modules
+        run: go mod download
+      - name: Build binaries
+        run: make build
+      - name: Upload binaries as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: bin
+
+  release:
+    name: Run release-please
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release-type: go
+      - name: Show release info
+        run: |
+          echo "Release created?  ${{ steps.release.outputs.release_created }}"
+          echo "Tag name:  ${{ steps.release.outputs.tag_name }}"
+          echo "Release notes body:  ${{ steps.release.outputs.body}}"
+      - name: Download binaries artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: binaries
+          path: binaries
+      - name: Upload binaries to release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.release.outputs.upload_url }}
+          asset_path: binaries
+          asset_name: binaries.zip
+          asset_content_type: application/zip
