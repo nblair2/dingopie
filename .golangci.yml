@@ -2,6 +2,7 @@ version: "2"
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+
 linters:
   enable:
     - arangolint
@@ -15,28 +16,35 @@ linters:
     - copyloopvar
     - cyclop
     - decorder
+    # - depguard
     - dogsled
     - dupl
     - dupword
     - durationcheck
     - embeddedstructfieldcheck
+    # - err113
     - errcheck
     - errchkjson
     - errname
     - errorlint
     - exhaustive
+    # - exhaustruct
     - exptostd
     - fatcontext
+    # - forbidigo
     - forcetypeassert
     - funcorder
     - funlen
     - ginkgolinter
     - gocheckcompilerdirectives
+    # - gochecknoglobals
+    # - gochecknoinits
     - gochecksumtype
     - gocognit
     - goconst
     - gocritic
     - gocyclo
+    - godoclint
     - godot
     - godox
     - goheader
@@ -61,6 +69,8 @@ linters:
     - makezero
     - mirror
     - misspell
+    # - mnd
+    - modernize
     - musttag
     - nakedret
     - nestif
@@ -68,6 +78,7 @@ linters:
     - nilnesserr
     - nilnil
     - nlreturn
+    - noctx
     - noinlineerr
     - nolintlint
     - nonamedreturns
@@ -99,31 +110,47 @@ linters:
     - unused
     - usestdlibvars
     - usetesting
-    - varnamelen
+    # - varnamelen
     - wastedassign
     - whitespace
-    - wrapcheck
+    # - wrapcheck
     - wsl_v5
     - zerologlint
+
   exclusions:
     warn-unused: true
     rules:
       - linters:
-          - revive
-        text: "exported: "
+          - noctx
+        text: net\.
+      - linters:
+          - gosec
+        text: "G104: Errors unhandled"
+      - linters:
+          - errcheck
+        text: bar\.
+      - linters:
+          - errcheck
+        text: \.Close
+      - linters:
+          - errcheck
+        text: cmd\.Help
       - linters:
           - revive
-        text: "package-comments: "
+        text: "'cmd' seems to be unused"
+        path: cmd/
+      - linters:
+          - revive
+        text: "'args' seems to be unused"
+        path: cmd/
+
   disable:
-    - gochecknoinits
-    - godoclint
-    - noctx
 
 formatters:
   enable:
     # - gci
     - gofmt
-    # - gofumpt
+    - gofumpt
     - goimports
     - golines
       

