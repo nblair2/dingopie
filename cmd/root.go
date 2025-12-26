@@ -1,3 +1,4 @@
+// Package cmd implements dingopie cli with cobra
 package cmd
 
 import (

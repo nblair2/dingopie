@@ -121,6 +121,9 @@ linters:
     warn-unused: true
     rules:
       - linters:
+          - godox
+        text: Line contains TODO/BUG/FIXME
+      - linters:
           - noctx
         text: net\.
       - linters:

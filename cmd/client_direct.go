@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	"dingopie/internal/common"
-	"dingopie/internal/direct"
+	"dingopie/internal"
+	"dingopie/internal/primary"
+	"dingopie/internal/secondary"
 	"fmt"
 	"os"
 	"time"
@@ -35,7 +36,7 @@ var clientDirectSendCmd = &cobra.Command{
 		fmt.Printf(">>>> Server IP: %s\n", ip)
 		fmt.Printf(">>>> Server Port: %d\n", port)
 		fmt.Printf(">>>> Wait: %v\n", wait)
-		fmt.Printf(">>>> Num Objects: %d\n", objects)
+		fmt.Printf(">>>> Num Objects: %d (x4 = %d bytes/message)\n", objects, objects*4)
 
 		var data []byte
 		var err error
@@ -57,28 +58,16 @@ var clientDirectSendCmd = &cobra.Command{
 			return
 		}
 
-		err = direct.ClientSend(ip, port, data, wait, objects)
+		if key != "" {
+			fmt.Printf(">>>> Key: %s\n", key)
+			data = internal.XorData(key, data)
+		}
+
+		err = primary.ClientSend(ip, port, data, wait, objects)
 		if err != nil {
 			fmt.Printf(
 				"Error with direct send: %v", err)
-		}
-		fmt.Println()
-
-		if key != "" {
-			fmt.Println(">> Decrypting data")
-			fmt.Printf(">>>> Key: %s\n", key)
-			data = common.XorData(key, data)
-		}
-
-		if file != "" {
-			err := os.WriteFile(file, data, 0o400)
-			if err != nil {
-				fmt.Printf("Error writing to file: %v\n", err)
-			} else {
-				fmt.Printf(">> Data written to %s\n", file)
-			}
-		} else {
-			fmt.Printf(">> Message: %s\n", string(data))
+			os.Exit(1)
 		}
 	},
 }
@@ -89,7 +78,7 @@ var clientDirectReceiveCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ip, _ := cmd.Flags().GetString("server-ip")
 		port, _ := cmd.Flags().GetInt("server-port")
-		filePath, _ := cmd.Flags().GetString("file")
+		file, _ := cmd.Flags().GetString("file")
 		wait, _ := cmd.Flags().GetDuration("wait")
 		key, _ := cmd.Flags().GetString("key")
 
@@ -98,37 +87,36 @@ var clientDirectReceiveCmd = &cobra.Command{
 		fmt.Printf(">>>> Server Port: %d\n", port)
 		fmt.Printf(">>>> Wait: %v\n", wait)
 
-		if filePath != "" {
-			_, err := os.Stat(filePath)
+		if file != "" {
+			_, err := os.Stat(file)
 			if err == nil {
-				fmt.Printf("Error: file %s already exists\n", filePath)
+				fmt.Printf("Error: file %s already exists\n", file)
 
 				return
 			}
-			fmt.Printf(">>>> File: %s\n", filePath)
+			fmt.Printf(">>>> File: %s\n", file)
 		}
 
-		data, err := direct.ClientReceive(ip, port, wait)
+		data, err := secondary.ClientReceive(ip, port, wait)
 		if err != nil {
 			fmt.Printf(
 				"Error with direct receive: %v\nAttempting to output what data we have\n",
 				err,
 			)
 		}
-		fmt.Println()
 
 		if key != "" {
 			fmt.Println(">> Decrypting data")
 			fmt.Printf(">>>> Key: %s\n", key)
-			data = common.XorData(key, data)
+			data = internal.XorData(key, data)
 		}
 
-		if filePath != "" {
-			err := os.WriteFile(filePath, data, 0o400)
+		if file != "" {
+			err := os.WriteFile(file, data, 0o400)
 			if err != nil {
 				fmt.Printf("Error writing to file: %v\n", err)
 			} else {
-				fmt.Printf(">> Data written to %s\n", filePath)
+				fmt.Printf(">> Data written to %s\n", file)
 			}
 		} else {
 			fmt.Printf(">> Message: %s\n", string(data))
@@ -169,5 +157,5 @@ func init() {
 		StringP("file", "f", "", "file to write data to (default is to stdout)")
 
 	clientDirectSendCmd.Flags().
-		IntP("objects", "o", 8, "number of 4-byte objects to send in each message")
+		IntP("objects", "o", 8, "number of 4-byte objects to send in each message (max 48)")
 }
