@@ -17,11 +17,18 @@ import (
 // "CRYPTO"
 // ==================================================================
 
-// XorData performs XOR encryption/decryption on the input data using a key derived from the provided password.
-func XorData(password string, data []byte) []byte {
+// NewCipherStream creates a new AES CTR cipher stream using a key derived from the provided password.
+func NewCipherStream(password string) cipher.Stream {
 	key := sha256.Sum256([]byte(password))
 	block, _ := aes.NewCipher(key[:])
 	stream := cipher.NewCTR(block, make([]byte, aes.BlockSize))
+
+	return stream
+}
+
+// XorData performs XOR encryption/decryption on the input data using a key derived from the provided password.
+func XorData(password string, data []byte) []byte {
+	stream := NewCipherStream(password)
 	out := make([]byte, len(data))
 	stream.XORKeyStream(out, data)
 
@@ -53,6 +60,8 @@ type DataSequence struct {
 // NewDataSequence creates a DataSequence from raw data and the number of objects per chunk.
 func NewDataSequence(data []byte, objects int) (DataSequence, error) {
 	var chunks [][]byte
+	// TODO this is hardcoded based on both client send and server send using 4 byte objects
+	const objectSize = 4
 
 	dataLen := len(data)
 	if dataLen > 0xFFFFFFFF {
@@ -62,12 +71,12 @@ func NewDataSequence(data []byte, objects int) (DataSequence, error) {
 		)
 	}
 
-	sizeBytes := make([]byte, 4)
+	sizeBytes := make([]byte, objectSize)
 
 	binary.BigEndian.PutUint32(sizeBytes, uint32(dataLen))
 
-	chunkSize := objects * 4
-	data = padDataToChunkSize(data, chunkSize)
+	chunkSize := objects * objectSize
+	data = PadDataToChunkSize(data, chunkSize)
 
 	paddedDataLen := len(data)
 	for i := 0; i < paddedDataLen; i += chunkSize {
@@ -83,8 +92,14 @@ func NewDataSequence(data []byte, objects int) (DataSequence, error) {
 	}, nil
 }
 
-func padDataToChunkSize(data []byte, chunkSize int) []byte {
-	padLen := chunkSize - (len(data) % chunkSize)
+// PadDataToChunkSize pads data with random bytes to make its length a multiple of chunkSize.
+func PadDataToChunkSize(data []byte, chunkSize int) []byte {
+	remainder := len(data) % chunkSize
+	if remainder == 0 {
+		return data
+	}
+
+	padLen := chunkSize - remainder
 
 	return append(data, NewRandomBytes(padLen)...)
 }

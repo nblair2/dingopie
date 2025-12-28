@@ -21,6 +21,7 @@
 package secondary
 
 import (
+	"bytes"
 	"dingopie/internal"
 	"encoding/binary"
 	"fmt"
@@ -36,16 +37,15 @@ import (
 // ==================================================================
 
 var (
-	initiateConnection []byte = internal.DNP3ReadClass1230
-	sendSize           []byte = internal.DNP3G30V4Q0
-	getData            []byte = internal.DNP3ReadClass123
-	sendData           []byte = internal.DNP3G30V3Q0
-	disconnect         []byte = internal.DNP3G30V1Q0
-
-	sendChan = make(chan []byte, 1)
-	recvChan = make(chan []byte, 1)
-	dataSeq  internal.DataSequence
-	frame    dnp3.Frame
+	initiateConnection = internal.DNP3ReadClass1230
+	sendSize           = [][]byte{internal.DNP3G30V4Q0}
+	getData            = internal.DNP3ReadClass123
+	sendData           = [][]byte{internal.DNP3G30V3Q0}
+	disconnect         = [][]byte{internal.DNP3G30V1Q0}
+	sendChan           = make(chan []byte, 1)
+	recvChan           = make(chan []byte, 1)
+	dataSeq            internal.DataSequence
+	frame              dnp3.Frame
 )
 
 // ==================================================================
@@ -114,10 +114,10 @@ func ServerSend(ip string, port int, data []byte, objects int) error {
 
 func serverProcess() error {
 	_, err := internal.ServerExchange(
-		frame,
+		&frame,
 		initiateConnection,
 		sendSize,
-		dataSeq.SizeBytes,
+		[][]byte{dataSeq.SizeBytes},
 		recvChan,
 		sendChan,
 	)
@@ -128,7 +128,14 @@ func serverProcess() error {
 	bar := internal.NewProgressBar(dataSeq.OriginalLength, ">>>> Sending: ")
 
 	for _, chunk := range dataSeq.DataChunks {
-		_, err := internal.ServerExchange(frame, getData, sendData, chunk, recvChan, sendChan)
+		_, err := internal.ServerExchange(
+			&frame,
+			getData,
+			sendData,
+			[][]byte{chunk},
+			recvChan,
+			sendChan,
+		)
 		if err != nil {
 			return fmt.Errorf("error sending data packet: %w", err)
 		}
@@ -137,10 +144,10 @@ func serverProcess() error {
 	}
 
 	_, err = internal.ServerExchange(
-		frame,
+		&frame,
 		getData,
 		disconnect,
-		append([]byte{1}, internal.NewRandomBytes(4)...),
+		[][]byte{append([]byte{1}, internal.NewRandomBytes(4)...)},
 		recvChan,
 		sendChan,
 	)
@@ -193,8 +200,8 @@ func ClientReceive(ip string, port int, wait time.Duration) ([]byte, error) {
 func clientReceiveProcess(wait time.Duration) recvResult {
 	var data []byte
 
-	recvData, err := internal.ClientExchange(
-		frame,
+	recvDataSlice, err := internal.ClientExchange(
+		&frame,
 		initiateConnection,
 		sendSize,
 		nil,
@@ -205,28 +212,38 @@ func clientReceiveProcess(wait time.Duration) recvResult {
 		return recvResult{data, fmt.Errorf("error during connect exchange: %w", err)}
 	}
 
+	recvData := bytes.Join(recvDataSlice, nil)
+	if len(recvData) != 4 {
+		return recvResult{data, fmt.Errorf("unexpected size data length: %d", len(recvData))}
+	}
+
 	size := int(binary.BigEndian.Uint32(recvData))
 	bar := internal.NewProgressBar(size, ">>>> Receiving: ")
 
-	for {
+	for len(data) < size {
 		time.Sleep(wait)
 
-		recvData, err = internal.ClientExchange(frame, getData, sendData, nil, sendChan, recvChan)
+		recvDataSlice, err := internal.ClientExchange(
+			&frame,
+			getData,
+			sendData,
+			nil,
+			sendChan,
+			recvChan,
+		)
 		if err != nil {
 			return recvResult{data, fmt.Errorf("error during get data exchange: %w", err)}
 		}
 
+		recvData = bytes.Join(recvDataSlice, nil)
 		data = append(data, recvData...)
-		bar.Add(len(recvData))
 
-		if len(data) >= size {
-			break
-		}
+		bar.Add(len(recvData))
 	}
 
 	bar.Finish()
 
-	_, err = internal.ClientExchange(frame, getData, disconnect, nil, sendChan, recvChan)
+	_, err = internal.ClientExchange(&frame, getData, disconnect, nil, sendChan, recvChan)
 
 	return recvResult{data[:size], err}
 }

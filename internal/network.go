@@ -62,12 +62,23 @@ func ServerHandleConn(conn net.Conn, read chan<- []byte, write <-chan []byte) er
 
 // ClientExchange handles a single send/receive cycle.
 func ClientExchange(
-	frame dnp3.Frame,
-	sendHeader, recvHeader, sendData []byte,
+	frame *dnp3.Frame,
+	sendHeader, recvHeader, sendData [][]byte,
 	sendChan chan<- []byte,
 	recvChan <-chan []byte,
-) ([]byte, error) {
-	msg, err := MakeDNP3Bytes(frame, sendHeader, sendData)
+) ([][]byte, error) {
+	if sendData == nil {
+		sendData = make([][]byte, len(sendHeader))
+	} else if len(sendHeader) != len(sendData) {
+		return nil, errors.New("send headers and data length mismatch")
+	}
+
+	sendPairs := make([][]byte, 0, len(sendHeader)*2)
+	for i := range sendHeader {
+		sendPairs = append(sendPairs, sendHeader[i], sendData[i])
+	}
+
+	msg, err := MakeDNP3Bytes(frame, sendPairs...)
 	if err != nil {
 		return nil, fmt.Errorf("error making DNP3 bytes: %w", err)
 	}
@@ -76,38 +87,91 @@ func ClientExchange(
 
 	msg = <-recvChan
 
-	header, recvData, err := GetObjectDataFromDNP3Bytes(msg)
-	if err != nil {
+	headers, data, err := GetObjectDataFromDNP3Bytes(msg)
+	switch {
+	case err != nil:
 		return nil, fmt.Errorf("error getting signal from DNP3 bytes: %w", err)
-	} else if !slices.Equal(recvHeader, header) {
-		return nil, fmt.Errorf("unexpected signal received %v, expected %v", header, recvHeader)
+	case len(headers) != len(data):
+		return nil, fmt.Errorf(
+			"send headers and data lengths do not match: %d headers, %d data",
+			len(headers),
+			len(data),
+		)
+	case len(recvHeader) != len(headers):
+		return nil, fmt.Errorf(
+			"unexpected number of expected headers: %d, received %d",
+			len(recvHeader),
+			len(headers),
+		)
 	}
 
-	return recvData, nil
+	for i, recvHdr := range recvHeader {
+		if !slices.Equal(recvHdr, headers[i]) {
+			return nil, fmt.Errorf(
+				"unexpected signal received %v, expected %v",
+				headers[i],
+				recvHdr,
+			)
+		}
+	}
+
+	return data, nil
 }
 
 // ServerExchange handles a single receive/send cycle.
 func ServerExchange(
-	frame dnp3.Frame,
-	recvHeader, sendHeader, sendData []byte,
+	frame *dnp3.Frame,
+	recvHeaders, sendHeader, sendData [][]byte,
 	recvChan <-chan []byte,
 	sendChan chan<- []byte,
-) ([]byte, error) {
-	msg := <-recvChan
-
-	header, recvData, err := GetObjectDataFromDNP3Bytes(msg)
-	if err != nil {
-		return nil, fmt.Errorf("error getting signal from bytes: %w", err)
-	} else if !slices.Equal(recvHeader, header) {
-		return nil, fmt.Errorf("unexpected signal received %v, expected %v", header, recvHeader)
+) ([][]byte, error) {
+	if sendData == nil {
+		sendData = make([][]byte, len(sendHeader))
+	} else if len(sendHeader) != len(sendData) {
+		return nil, errors.New("send headers and data length mismatch")
 	}
 
-	msg, err = MakeDNP3Bytes(frame, sendHeader, sendData)
+	msg := <-recvChan
+
+	headers, data, err := GetObjectDataFromDNP3Bytes(msg)
+	switch {
+	case err != nil:
+		return nil, fmt.Errorf("error getting signal from DNP3 bytes: %w", err)
+	case len(headers) != len(data):
+		return nil, fmt.Errorf(
+			"send headers and data lengths do not match: %d headers, %d data",
+			len(headers),
+			len(data),
+		)
+	case len(recvHeaders) != len(headers):
+		return nil, fmt.Errorf(
+			"unexpected number of expected headers: %d, received %d",
+			len(recvHeaders),
+			len(headers),
+		)
+	}
+
+	for i, recvHdr := range recvHeaders {
+		if !slices.Equal(recvHdr, headers[i]) {
+			return nil, fmt.Errorf(
+				"unexpected signal received %v, expected %v",
+				headers[i],
+				recvHdr,
+			)
+		}
+	}
+
+	sendPairs := make([][]byte, 0, len(sendHeader)*2)
+	for i := range sendHeader {
+		sendPairs = append(sendPairs, sendHeader[i], sendData[i])
+	}
+
+	msg, err = MakeDNP3Bytes(frame, sendPairs...)
 	if err != nil {
 		return nil, fmt.Errorf("error making dnp3 bytes: %w", err)
 	}
 
 	sendChan <- msg
 
-	return recvData, nil
+	return data, nil
 }

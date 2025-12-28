@@ -22,6 +22,11 @@ jobs:
         with:
           version: v2.5.0
 
+  codespell:
+    - uses: actions/checkout@v5
+    - uses: cspell-project/actions-codespell@v2
+      with:
+        ignore_words_file: .codespellignore
   test:
     name: test
     runs-on: ubuntu-latest

@@ -78,7 +78,7 @@ linters:
     - nilnesserr
     - nilnil
     - nlreturn
-    - noctx
+    # - noctx
     - noinlineerr
     - nolintlint
     - nonamedreturns
@@ -124,9 +124,6 @@ linters:
           - godox
         text: Line contains TODO/BUG/FIXME
       - linters:
-          - noctx
-        text: net\.
-      - linters:
           - gosec
         text: "G104: Errors unhandled"
       - linters:
@@ -138,10 +135,6 @@ linters:
       - linters:
           - errcheck
         text: cmd\.Help
-      - linters:
-          - revive
-        text: "'cmd' seems to be unused"
-        path: cmd/
       - linters:
           - revive
         text: "'args' seems to be unused"

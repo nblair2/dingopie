@@ -3,11 +3,29 @@ BINDIR  ?= $(PWD)/bin
 LDFLAGS ?= -ldflags="-s -w" -trimpath
 GO_FILES := $(shell find . -name '*.go')
 
-.PHONY: clean build test test-direct-server-send-client-receive hooks lint fix fmt help
-
 # Show this help
 help:
-	@cat $(MAKEFILE_LIST) | docker run --rm -i xanders/make-help
+	@echo "Makefile commands:"
+	@echo
+	@echo "Build:"
+	@echo "  make clean                Remove built binaries and test files"
+	@echo "  make build                Build binaries"
+	@echo
+	@echo "Tests:"
+	@echo "  make test                 Run all tests"
+	@echo "  make test-send-primary    Test send/receive sending from client to server"
+	@echo "  make test-send-secondary  Test send/receive sending from server to client"
+	@echo "  make test-shell-primary   Test shell/connect with server shell"
+	@echo "  make test-shell-secondary Test shell/connect with client shell"
+	@echo
+	@echo "Development tools:"
+	@echo "  make setup                Setup development environment"
+	@echo "  make hooks                Install git hooks"
+	@echo "  make lint                 Run golangci-lint to check for issues"
+	@echo "  make fix                  Run golangci-lint to auto-fix fixable issues"
+	@echo "  make spell                Run codespell to check for spelling errors"
+	@echo "  make check  			   Run lint and spell checks"
+	@echo
 
 ##
 ##  ------------------------- Build and Clean ----------------------------
@@ -36,65 +54,103 @@ $(BINDIR)/dingopie.exe: $(GO_FILES)
 ## ------------------------- Tests ---------------------------------------
 ##
 
-define run_test
-	@echo "=================================================================="
+define test_send
 	@echo "=================================================================="
 	@echo "==> Starting test $@"
-	@echo "=================================================================="
 	@rm -rf test/
 	@mkdir -p test
-	@head -c $$(shuf -i 256-8192 -n 1) /dev/urandom > test/in.txt
-	@head -c $$(shuf -i 8-128 -n 1) /dev/urandom | base64 | tr -d '/+=' > test/key.txt
-	@echo "--> Starting server (in background)"
+	@head -c $$(shuf -i 256-8192 -n 1) /dev/urandom | base64 > test/in.txt
+	@head -c $$(shuf -i 8-128 -n 1) /dev/urandom | base64 > test/key.txt
+	@echo "--> Starting server in background (mode: server direct $(1))"
 	@KEY=$$(cat test/key.txt); \
-	$(BINDIR)/dingopie.bin server $(1) --key $$KEY > test/server.log 2>&1 &
+	$(BINDIR)/dingopie.bin server direct $(1) --key $$KEY 2>&1 > test/server.log &
 	@sleep 1
-	@echo "--> Starting client:"
+	@echo "--> Starting client (mode: client direct $(2))"
 	@echo
 	@KEY=$$(cat test/key.txt); \
-	$(BINDIR)/dingopie.bin client $(2) --key $$KEY --server-ip 127.0.0.1 --wait "$$(shuf -i 10-500 -n 1)ms"
+	$(BINDIR)/dingopie.bin client direct $(2) --key $$KEY --server-ip 127.0.0.1 --wait "$$(shuf -i 10-500 -n 1)ms"
 	@echo
 	@sleep 1
-	@kill $(lsof -t -i :20000) 2>/dev/null && echo "--> Server stopped by force (unexpected)" || echo "--> Server already stopped on its own (expected)"
+	@kill $$(lsof -t -i :20000) 2>/dev/null && echo "--> Server stopped by force (unexpected)" || echo "--> Server already stopped on its own (expected)"
 	@echo "--> Server log:"
 	@echo 
 	@cat test/server.log
 	@echo
-	@echo "=================================================================="
 	@echo "--> Verifying outputs match"
 	@if cmp -s test/in.txt test/out.txt; then echo "==> PASSED $@"; else echo "==> FAILED $@"; exit 1; fi
 	@echo "--> Cleaning up"
 	@rm -rf test/
-	@echo "==> Complete test $@"
-	@echo "=================================================================="
+	@echo "==> Complete $@"
 	@echo "=================================================================="
 	@sleep 1
 endef
 
-test: clean build test-primary test-secondary
+define test_shell
+    @echo "=================================================================="
+    @echo "==> Starting test $@"
+    @rm -rf test/
+    @mkdir -p test
+	@head -c $$(shuf -i 256-8192 -n 1) /dev/urandom | base64 > test/in.txt
+    @head -c $$(shuf -i 8-128 -n 1) /dev/urandom | base64 > test/key.txt
+    @echo "--> Starting server in background ($(1))"
+    @KEY=$$(cat test/key.txt); \
+    $(1) --key $$KEY 2>&1 > test/server.log &
+    @sleep 1
+    @echo "--> Starting client ($(2))"
+	@echo
+    @KEY=$$(cat test/key.txt); \
+    $(2) --key $$KEY --server-ip 127.0.0.1 2>&1 | tee test/client.log
+	@echo
+	@sleep 1
+	@kill $$(lsof -t -i :20000) 2>/dev/null && echo "--> Server stopped by force (unexpected)" || echo "--> Server already stopped on its own (expected)"
+	@echo "--> Server log:"
+	@echo 
+	@cat test/server.log
+	@echo
+    @echo "--> Verifying output"
+    @if grep -q -f test/in.txt $(3); then echo "==> PASSED $@"; else echo "==> FAILED $@"; exit 1; fi
+    @echo "--> Cleaning up"
+    @rm -rf test/
+    @echo "==> Complete $@"
+    @echo "=================================================================="
+    @sleep 1
+endef
 
-test-primary:
-	$(call run_test,direct receive --file test/out.txt,direct send --file test/in.txt --objects $$(shuf -i 4-48 -n 1))
+test: clean build test-send-primary test-send-secondary test-shell-primary test-shell-secondary
 
-test-secondary:
-	$(call run_test,direct send --file test/in.txt --objects $$(shuf -i 4-60 -n 1), direct receive --file test/out.txt)
+test-send-primary:
+	$(call test_send,receive --file test/out.txt,send --file test/in.txt --objects $$(shuf -i 4-48 -n 1))
+
+test-send-secondary:
+	$(call test_send,send --file test/in.txt --objects $$(shuf -i 4-60 -n 1),receive --file test/out.txt)
+
+test-shell-primary:
+	$(call test_shell,$(BINDIR)/dingopie.bin server direct shell,echo "cat test/in.txt; exit;" | timeout 10s $(BINDIR)/dingopie.bin client direct connect,test/client.log)
+
+test-shell-secondary:
+	$(call test_shell,echo "cat test/in.txt; exit;" | timeout 10s $(BINDIR)/dingopie.bin server direct connect,$(BINDIR)/dingopie.bin client direct shell,test/server.log)
+
 ##
 ## ------------------------- Developer tools -----------------------------
 ##
 
-# Setup tools for development
 setup: hooks
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.7.2
-	sudo apt-get install lsof
+	sudo apt-get install lsof codespell
 
-# Install repository provided git hooks
 hooks:
 	git config core.hooksPath .githooks
 
-# Run golangci-lint to check for errors
+fix:
+	$$(go env GOPATH)/bin/golangci-lint run ./... --fix
+
 lint:
 	$$(go env GOPATH)/bin/golangci-lint run ./...
 
-# Run golangci-lint to auto-fix fixable issues
-fix:
-	$$(go env GOPATH)/bin/golangci-lint run ./... --fix
+spell:
+	codespell -I .codespellignore .
+
+check: lint spell
+
+
+.PHONY: clean build test test-send-primary test-send-secondary test-shell-primary test-shell-secondary setup hooks fix lint spell check
