@@ -76,7 +76,7 @@ func ServerSend(ip string, port int, data []byte, objects int) error {
 	fmt.Printf(">> Listening on %s\n", socket)
 
 	conn, err := ln.Accept()
-	fmt.Printf(">> Client connected: %s\n", conn.RemoteAddr().String())
+	fmt.Printf(">>>> Client connected: %s\n", conn.RemoteAddr().String())
 
 	if err != nil {
 		return fmt.Errorf("error accepting connection: %w", err)

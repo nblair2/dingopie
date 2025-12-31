@@ -14,7 +14,7 @@ import (
 var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Run as a DNP3 outstation",
-	Long: banner + `
+	Long: internal.Banner + `
 The server role is designed to act like a DNP3 outstation.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
@@ -24,7 +24,7 @@ The server role is designed to act like a DNP3 outstation.`,
 var serverDirectCmd = &cobra.Command{
 	Use:   "direct",
 	Short: "Run server in direct mode",
-	Long: banner + `
+	Long: internal.Banner + `
 In direct mode, dingopie creates a new DNP3 channel.
 Data is sent in DNP3 Application Objects.`,
 	Run: func(cmd *cobra.Command, args []string) {

@@ -20,13 +20,17 @@ jobs:
           go-version: 1.24.4
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.5.0
+          version: v2.7.2
 
   codespell:
-    - uses: actions/checkout@v5
-    - uses: cspell-project/actions-codespell@v2
-      with:
-        ignore_words_file: .codespellignore
+    name: codespell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: codespell-project/actions-codespell@v2
+        with:
+          ignore_words_file: .codespellignore
+
   test:
     name: test
     runs-on: ubuntu-latest

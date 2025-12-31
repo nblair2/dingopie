@@ -6,8 +6,8 @@
 // Data Scheme:
 //   - Data from the Client (DNP3 Master) uses Direct Operate No Ack requests. This allows large chunks of data to be
 //     sent, and avoids traditional 'ACKs' that come with Select/Operate or Direct Operate requests. Each frame will
-//     have a single Group 41 Variation 1 (Binary Output Status) object containing the size of the data being sent
-//     (5 byte header, 2 bytes of length + 1 byte event status). The payload is sent in Group 41 Variation 2 (Binary
+//     have a single Group 41 Variation 2 (Binary Output Status) object containing the size of the data being sent
+//     (5 byte header, 2 bytes of length + 1 byte event status). The payload is sent in Group 41 Variation 1 (Binary
 //     Output Command) objects (5 byte header, N*(4 bytes of data + 1 byte event status)). In both, event status
 //     bytes are set to 0x00 to satisfy DNP3 object structure requirements (packing data in here would show strange
 //     statuses and potentially use a reserved bit).
@@ -326,6 +326,7 @@ func ClientConnect(ip string, port int, key string) error {
 	defer conn.Close()
 
 	fmt.Printf(">> Connected to %s:%d\n", ip, port)
+	fmt.Print(internal.Banner)
 
 	stream := newClientStream(key, conn)
 
@@ -368,6 +369,8 @@ func ServerConnect(key, ip string, port int) error {
 	defer conn.Close()
 
 	fmt.Printf(">>>> Connection from %s\n", conn.RemoteAddr().String())
+	fmt.Print(internal.Banner)
+
 	stream := newServerStream(key, conn)
 
 	return connect(stream, serverMaxDataLen)

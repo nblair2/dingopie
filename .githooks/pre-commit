@@ -8,9 +8,10 @@ if (git diff --cached --name-only | grep --silent '\.go$'); then
         exit 1
     fi
 
-    make test
+    make spell
     if [ $? -ne 0 ]; then
-        echo "Tests failed. Commit aborted."
+        echo "codespell failed. Commit aborted."
         exit 1
     fi
+
 fi

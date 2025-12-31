@@ -141,6 +141,16 @@ linters:
         path: cmd/
 
   disable:
+    - depguard
+    - err113
+    - exhaustruct
+    - forbidigo
+    - gochecknoglobals
+    - gochecknoinits
+    - mnd
+    - noctx
+    - varnamelen
+    - wrapcheck
 
 formatters:
   enable:

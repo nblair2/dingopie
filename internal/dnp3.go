@@ -9,8 +9,6 @@ import (
 	"github.com/nblair2/go-dnp3/dnp3"
 )
 
-// dnp3.go contains DNP3 specific constants and helper functions.
-
 const (
 	dnp3MasterAddress     uint16 = 1
 	dnp3OutstationAddress uint16 = 1024
@@ -51,21 +49,6 @@ var (
 		DNP3ReadClass3,
 		DNP3ReadClass0,
 	}
-
-	// // DNP3ReadClass123 object header - 9 bytes, no data.
-	// DNP3ReadClass123 = slices.Concat(
-	// 	DNP3ReadClass1,
-	// 	DNP3ReadClass2,
-	// 	DNP3ReadClass3,
-	// ).
-
-	// // DNP3ReadClass1230 object header - 12 bytes, no data.
-	// DNP3ReadClass1230 = slices.Concat(
-	// 	DNP3ReadClass1,
-	// 	DNP3ReadClass2,
-	// 	DNP3ReadClass3,
-	// 	DNP3ReadClass0,
-	// ).
 
 	// DNP3G30V1Q0 object header G30, V1, QF 0 - Analog Input 32 bit with flag.
 	DNP3G30V1Q0 = []byte{
@@ -145,8 +128,6 @@ var objectHeaders = [][]byte{
 }
 
 var pointSizeMap = map[string]int{
-	// string(DNP3ReadClass123):  0,
-	// string(DNP3ReadClass1230): 0,
 	string(DNP3ReadClass1): 0,
 	string(DNP3ReadClass2): 0,
 	string(DNP3ReadClass3): 0,
@@ -209,17 +190,21 @@ func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 	return frame
 }
 
-// NewDNP3RequestFrame creates DNP3 request (master to outstation) frame.
+// NewDNP3RequestFrame creates DNP3 request (master to outstation) frame. Defaults to Data Link Function Code
+// Uncomfirmed User Data, Application Function Code Read.
 func NewDNP3RequestFrame() dnp3.Frame {
 	return newDNP3Frame(true, dnp3MasterAddress, dnp3OutstationAddress)
 }
 
-// NewDNP3ResponseFrame creates DNP3 response (outstation to master) frame.
+// NewDNP3ResponseFrame creates DNP3 response (outstation to master) frame. Defaults to Data Link Function Code
+// Uncomfirmed User Data, Application Function Code Response.
 func NewDNP3ResponseFrame() dnp3.Frame {
 	return newDNP3Frame(false, dnp3OutstationAddress, dnp3MasterAddress)
 }
 
-// GetObjectDataFromDNP3Bytes helps parse raw DNP3 frames into an object header (signal) and its data.
+// GetObjectDataFromDNP3Bytes helps parse raw DNP3 frames into pairs of object headers and the associated data.
+// The headers and data are returned as slices of byte slices, where each index corresponds to a header-data pair.
+// This is the opposite of MakeDNP3Bytes.
 func GetObjectDataFromDNP3Bytes(inData []byte) ([][]byte, [][]byte, error) {
 	var headers, data [][]byte
 
@@ -297,10 +282,12 @@ func SplitDNP3Frames(data []byte) ([][]byte, error) {
 	return frames, nil
 }
 
-// MakeDNP3Bytes helps create raw DNP3 frames from pairs of object headers and data.
+// MakeDNP3Bytes helps create raw DNP3 frames from a 'base' frame and pairs of object headers and data. The base frame
+// should be a dnp3.frame. Sequence numbers will be incremented. Headers must be byte slices that already exist in
+// pointSizeMap. Data slices must have a length that is a multiple of the point size for the corresponding header (as
+// defined in pointSizeMap). Currently, only Qualifier Field 0 (packed without prefix, 1-octet start and stop indices)
+// is supported. Start index is randomly chosen, and stop is calculated based on data length.
 func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error) {
-	incrementDNP3Sequence(frame)
-
 	var result []byte
 
 	if len(headerDataPairs)%2 != 0 {
@@ -310,7 +297,12 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 	for i := 0; i < len(headerDataPairs); i += 2 {
 		header := headerDataPairs[i]
 		data := headerDataPairs[i+1]
-		pointSize := pointSizeMap[string(header)]
+
+		pointSize, ok := pointSizeMap[string(header)]
+		if !ok {
+			return nil, fmt.Errorf("unknown object header %v", header)
+		}
+
 		result = append(result, header...)
 
 		if pointSize != 0 {
@@ -321,6 +313,10 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 					pointSize,
 					header,
 				)
+			}
+
+			if header[2] != 0x00 {
+				return nil, errors.New("only Qualifier Field 0 is supported")
 			}
 
 			size := len(data) / pointSize
@@ -335,7 +331,6 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 			//nolint:gosec // G404: Just need a random number, not cryptographically relevant
 			start := rand.Intn(256 - size)
 			end := start + size - 1
-
 			result = append(result, byte(start), byte(end))
 			result = append(result, data...)
 		} else if len(data) > 0 {
@@ -350,6 +345,7 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 		return nil, fmt.Errorf("error parsing application data from bytes: %w", err)
 	}
 
+	incrementDNP3Sequence(frame)
 	frame.Application.SetData(appData)
 
 	return frame.ToBytes()

@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	github.com/creack/pty v1.1.24
-	github.com/nblair2/go-dnp3 v0.1.3-0.20251215024314-0c3df2be37dc
+	github.com/nblair2/go-dnp3 v1.0.1
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.37.0

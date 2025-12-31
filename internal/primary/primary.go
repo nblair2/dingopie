@@ -19,7 +19,7 @@
 //		     ...
 //	 End:
 //		(master)--- ReadClass123   -->(outstation)  Disconnect
-//		(master)<-- G30V3Q0 + rand ---(outstation)  AckDisconnect
+//		(master)<-- G30V1Q0 + rand ---(outstation)  AckDisconnect
 package primary
 
 import (
@@ -98,6 +98,7 @@ func ClientSend(ip string, port int, data []byte, wait time.Duration, objects in
 	}
 }
 
+// clientSendProcess handles the connection logic described above. Connect, send size, loop sending data, disconnect.
 func clientSendProcess(wait time.Duration) error {
 	_, err := internal.ClientExchange(
 		&frame,
@@ -162,52 +163,16 @@ func clientSendProcess(wait time.Duration) error {
 	return nil
 }
 
+// clientExchangeAck is like internal.ClientExchange but verifies that the data sent is echoed back correctly.
 func clientExchangeAck(headers, data [][]byte) error {
-	if len(headers) != len(data) {
-		return fmt.Errorf(
-			"header and data length mismatch: %d headers, %d data",
-			len(headers),
-			len(data),
-		)
-	}
-
-	sendPairs := make([][]byte, 0, len(headers)*2)
-	for i := range headers {
-		sendPairs = append(sendPairs, headers[i], data[i])
-	}
-
-	msg, err := internal.MakeDNP3Bytes(&frame, sendPairs...)
+	recvData, err := internal.ClientExchange(&frame, headers, headers, data, sendChan, recvChan)
 	if err != nil {
-		return fmt.Errorf("error making DNP3 bytes: %w", err)
+		return err
 	}
 
-	sendChan <- msg
-
-	msg = <-recvChan
-
-	recvHeaders, recvData, err := internal.GetObjectDataFromDNP3Bytes(msg)
-	switch {
-	case err != nil:
-		return fmt.Errorf("error getting signal from DNP3 bytes: %w", err)
-	case len(recvHeaders) != len(recvData):
-		return fmt.Errorf(
-			"send headers and data lengths do not match: %d headers, %d data",
-			len(recvHeaders),
-			len(recvData),
-		)
-	case len(recvHeaders) != len(headers):
-		return fmt.Errorf(
-			"unexpected number of expected headers: %d, received %d",
-			len(headers),
-			len(recvHeaders),
-		)
-	}
-
-	for i, recvHdr := range recvHeaders {
-		if !slices.Equal(recvHdr, headers[i]) {
-			return fmt.Errorf("unexpected signal received %v, expected %v", recvHdr, headers[i])
-		} else if !slices.Equal(recvData[i], data[i]) {
-			return fmt.Errorf("unexpected data received %v, expected %v", recvData[i], data[i])
+	for i, d := range data {
+		if !slices.Equal(d, recvData[i]) {
+			return fmt.Errorf("unexpected data received %v, expected %v", recvData[i], d)
 		}
 	}
 
@@ -235,7 +200,7 @@ func ServerReceive(ip string, port int) ([]byte, error) {
 	fmt.Printf(">> Listening on %s\n", socket)
 
 	conn, err := ln.Accept()
-	fmt.Printf(">> Client connected: %s\n", conn.RemoteAddr().String())
+	fmt.Printf(">>>> Client connected: %s\n", conn.RemoteAddr().String())
 
 	if err != nil {
 		return nil, fmt.Errorf("error accepting connection: %w", err)
@@ -264,13 +229,12 @@ func ServerReceive(ip string, port int) ([]byte, error) {
 			if result.err != nil {
 				return result.data, result.err
 			}
-			// // if no errV
-			// <-connErrChan
-			// return result.data, nil
 		}
 	}
 }
 
+// serverReceiveProcess handles the connection logic described above. Ack connection, receive size, loop receiving
+// data, ack disconnect.
 func serverReceiveProcess() recvResult {
 	var data []byte
 
@@ -335,52 +299,17 @@ func serverReceiveProcess() recvResult {
 	return recvResult{data[:size], err}
 }
 
+// serverExchangeAck is like internal.ServerExchange but echoes back the received data.
 func serverExchangeAck(expectedHeaders, responseHeaders [][]byte) ([][]byte, error) {
-	if len(expectedHeaders) != len(responseHeaders) {
-		return nil, fmt.Errorf(
-			"expected and response header length mismatch: %d expected, %d response",
-			len(expectedHeaders),
-			len(responseHeaders),
-		)
-	}
-
-	recvData := <-recvChan
-
-	headers, data, err := internal.GetObjectDataFromDNP3Bytes(recvData)
-	switch {
-	case err != nil:
-		return nil, fmt.Errorf("error getting signal from bytes: %w", err)
-	case len(headers) != len(data):
-		return nil, fmt.Errorf(
-			"received headers and data length mismatch: %d headers, %d data",
-			len(headers),
-			len(data),
-		)
-	case len(headers) != len(expectedHeaders):
-		return nil, fmt.Errorf(
-			"unexpected number of expected headers: %d, received %d",
-			len(expectedHeaders),
-			len(headers),
-		)
-	}
-
-	for i, expHdr := range expectedHeaders {
-		if !slices.Equal(expHdr, headers[i]) {
-			return nil, fmt.Errorf("unexpected signal received %v, expected %v", headers[i], expHdr)
-		}
-	}
-
-	sendPairs := make([][]byte, 0, len(responseHeaders)*2)
-	for i := range responseHeaders {
-		sendPairs = append(sendPairs, responseHeaders[i], data[i])
-	}
-
-	msg, err := internal.MakeDNP3Bytes(&frame, sendPairs...)
+	data, err := internal.ReceiveAndValidate(recvChan, expectedHeaders)
 	if err != nil {
-		return nil, fmt.Errorf("error making DNP3 bytes: %w", err)
+		return nil, err
 	}
 
-	sendChan <- msg
+	err = internal.SendMessage(&frame, responseHeaders, data, sendChan)
+	if err != nil {
+		return nil, err
+	}
 
 	return data, nil
 }

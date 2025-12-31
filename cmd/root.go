@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"dingopie/internal"
 	"fmt"
 	"os"
 	"strings"
@@ -9,22 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const banner = `
-▓█████▄  ██▓ ███▄    █   ▄████  ▒█████   ██▓███   ██▓▓█████ 
-▒██▀ ██▌▓██▒ ██ ▀█   █  ██▒ ▀█▒▒██▒  ██▒▓██░  ██▒▓██▒▓█   ▀ 
-░██   █▌▒██▒▓██  ▀█ ██▒▒██░▄▄▄░▒██░  ██▒▓██░ ██▓▒▒██▒▒███   
-░▓█▄   ▌░██░▓██▒  ▐▌██▒░▓█  ██▓▒██   ██░▒██▄█▓▒ ▒░██░▒▓█  ▄ 
-░▒████▓ ░██░▒██░   ▓██░░▒▓███▀▒░ ████▓▒░▒██▒ ░  ░░██░░▒████▒
- ▒▒▓  ▒ ░▓  ░ ▒░   ▒ ▒  ░▒   ▒ ░ ▒░▒░▒░ ▒▓▒░ ░  ░░▓  ░░ ▒░ ░
- ░ ▒  ▒  ▒ ░░ ░░   ░ ▒░  ░   ░   ░ ▒ ▒░ ░▒ ░      ▒ ░ ░ ░  ░
-
-      |\__/|     This skullduggery brought       ) (
-     /     \     to you by the Camp George      ) ( )
-    /_.~ ~,_\        West Computer Club       :::::::::
-       \@/                                   ~\_______/~
-`
-
-func printBanner(cmd *cobra.Command, args []string) {
+func printCommand(cmd *cobra.Command, args []string) {
 	fmt.Println(
 		strings.ReplaceAll(fmt.Sprintf("======== %s ========", cmd.CommandPath()), " ", " | "),
 	)
@@ -33,11 +19,11 @@ func printBanner(cmd *cobra.Command, args []string) {
 var rootCmd = &cobra.Command{
 	Use:   "dingopie",
 	Short: "dingopie is a DNP3 covert channel",
-	Long: banner + `
+	Long: internal.Banner + `
 dingopie is a DNP3 covert channel.
 It supports server and client roles, direct and inject modes, and various actions.`,
-	PersistentPreRun:  printBanner,
-	PersistentPostRun: printBanner,
+	PersistentPreRun:  printCommand,
+	PersistentPostRun: printCommand,
 }
 
 // Execute entrypoint for dingopie CLI.

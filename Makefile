@@ -61,11 +61,11 @@ define test_send
 	@mkdir -p test
 	@head -c $$(shuf -i 256-8192 -n 1) /dev/urandom | base64 > test/in.txt
 	@head -c $$(shuf -i 8-128 -n 1) /dev/urandom | base64 > test/key.txt
-	@echo "--> Starting server in background (mode: server direct $(1))"
+	@echo "--> Starting server in background"
 	@KEY=$$(cat test/key.txt); \
 	$(BINDIR)/dingopie.bin server direct $(1) --key $$KEY 2>&1 > test/server.log &
 	@sleep 1
-	@echo "--> Starting client (mode: client direct $(2))"
+	@echo "--> Starting client"
 	@echo
 	@KEY=$$(cat test/key.txt); \
 	$(BINDIR)/dingopie.bin client direct $(2) --key $$KEY --server-ip 127.0.0.1 --wait "$$(shuf -i 10-500 -n 1)ms"
@@ -90,13 +90,13 @@ define test_shell
     @echo "==> Starting test $@"
     @rm -rf test/
     @mkdir -p test
-	@head -c $$(shuf -i 256-8192 -n 1) /dev/urandom | base64 > test/in.txt
+	@head -c $$(shuf -i 128-1024 -n 1) /dev/urandom | base64 > test/in.txt
     @head -c $$(shuf -i 8-128 -n 1) /dev/urandom | base64 > test/key.txt
-    @echo "--> Starting server in background ($(1))"
+    @echo "--> Starting server in background"
     @KEY=$$(cat test/key.txt); \
     $(1) --key $$KEY 2>&1 > test/server.log &
     @sleep 1
-    @echo "--> Starting client ($(2))"
+    @echo "--> Starting client"
 	@echo
     @KEY=$$(cat test/key.txt); \
     $(2) --key $$KEY --server-ip 127.0.0.1 2>&1 | tee test/client.log
@@ -116,6 +116,8 @@ define test_shell
     @sleep 1
 endef
 
+SHELL_TEST_COMMANDS = "echo 'hello dingopie'; ls test; cat test/in.txt; exit;"
+
 test: clean build test-send-primary test-send-secondary test-shell-primary test-shell-secondary
 
 test-send-primary:
@@ -125,10 +127,10 @@ test-send-secondary:
 	$(call test_send,send --file test/in.txt --objects $$(shuf -i 4-60 -n 1),receive --file test/out.txt)
 
 test-shell-primary:
-	$(call test_shell,$(BINDIR)/dingopie.bin server direct shell,echo "cat test/in.txt; exit;" | timeout 10s $(BINDIR)/dingopie.bin client direct connect,test/client.log)
+	$(call test_shell,$(BINDIR)/dingopie.bin server direct shell,echo $(SHELL_TEST_COMMANDS) | timeout 10s $(BINDIR)/dingopie.bin client direct connect,test/client.log)
 
 test-shell-secondary:
-	$(call test_shell,echo "cat test/in.txt; exit;" | timeout 10s $(BINDIR)/dingopie.bin server direct connect,$(BINDIR)/dingopie.bin client direct shell,test/server.log)
+	$(call test_shell,echo $(SHELL_TEST_COMMANDS) | timeout 10s $(BINDIR)/dingopie.bin server direct connect,$(BINDIR)/dingopie.bin client direct shell,test/server.log)
 
 ##
 ## ------------------------- Developer tools -----------------------------

@@ -15,10 +15,10 @@ import (
 var clientCmd = &cobra.Command{
 	Use:   "client",
 	Short: "Run as a DNP3 master",
-	Long: banner + `
+	Long: internal.Banner + `
 The client role is designed to act like a DNP3 master.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		printBanner(cmd, args)
+		printCommand(cmd, args)
 		if cmd.HasSubCommands() {
 			return
 		}
@@ -36,7 +36,7 @@ The client role is designed to act like a DNP3 master.`,
 var clientDirectCmd = &cobra.Command{
 	Use:   "direct",
 	Short: "Run client in direct mode",
-	Long: banner + `
+	Long: internal.Banner + `
 In direct mode, dingopie creates a new DNP3 channel. Data is sent in DNP3 Application Objects.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()

@@ -105,6 +105,8 @@ func PadDataToChunkSize(data []byte, chunkSize int) []byte {
 }
 
 // InsertPeriodicBytes inserts the a slice into the source starting at offset and repeating every period bytes.
+// For example: InsertPeriodicBytes([]byte{0x1,0x2,0x3,0x4,0x5,0x6}, []byte{0xA, 0xB}, 2, 2)
+// Results in:  []byte{0x1,0x2,0xA,0xB,0x3,0x4,0xA,0xB,0x5,0x6,0xA,0xB}.
 func InsertPeriodicBytes(source, insertion []byte, offset, period int) ([]byte, error) {
 	if (len(source)-offset)%period != 0 {
 		return nil, errors.New("source length minus offset must be multiple of period")
@@ -125,6 +127,8 @@ func InsertPeriodicBytes(source, insertion []byte, offset, period int) ([]byte, 
 }
 
 // RemovePeriodicBytes undoes the insertions from InsertPeriodicBytes.
+// For example: RemovePeriodicBytes([]byte{0x1,0x2,0xA,0xB,0x3,0x4,0xA,0xB,0x5,0x6,0xA,0xB}, 2, 2, 2)
+// Results in:  []byte{0x1,0x2,0x3,0x4,0x5,0x6}.
 func RemovePeriodicBytes(source []byte, insertLen, offset, period int) ([]byte, error) {
 	if offset > len(source) {
 		return nil, fmt.Errorf("offset %d is larger than source length %d", offset, len(source))
@@ -167,3 +171,20 @@ func NewProgressBar(size int, message string) *progressbar.ProgressBar {
 		progressbar.OptionOnCompletion(func() { fmt.Println() }),
 	)
 }
+
+// Banner helps us follow Rule 1: Look cool.
+const Banner = `
+▓█████▄  ██▓ ███▄    █   ▄████  ▒█████   ██▓███   ██▓▓█████ 
+▒██▀ ██▌▓██▒ ██ ▀█   █  ██▒ ▀█▒▒██▒  ██▒▓██░  ██▒▓██▒▓█   ▀ 
+░██   █▌▒██▒▓██  ▀█ ██▒▒██░▄▄▄░▒██░  ██▒▓██░ ██▓▒▒██▒▒███   
+░▓█▄   ▌░██░▓██▒  ▐▌██▒░▓█  ██▓▒██   ██░▒██▄█▓▒ ▒░██░▒▓█  ▄ 
+░▒████▓ ░██░▒██░   ▓██░░▒▓███▀▒░ ████▓▒░▒██▒ ░  ░░██░░▒████▒
+ ▒▒▓  ▒ ░▓  ░ ▒░   ▒ ▒  ░▒   ▒ ░ ▒░▒░▒░ ▒▓▒░ ░  ░░▓  ░░ ▒░ ░
+ ░ ▒  ▒  ▒ ░░ ░░   ░ ▒░  ░   ░   ░ ▒ ▒░ ░▒ ░      ▒ ░ ░ ░  ░
+
+      |\__/|     This skullduggery brought       ) (
+     /     \     to you by the Camp George      ) ( )
+    /_.~ ~,_\        West Computer Club       :::::::::
+       \@/                                   ~\_______/~
+
+`
