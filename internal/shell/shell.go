@@ -28,6 +28,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,7 +44,7 @@ import (
 
 var (
 	// maxDataLen constricts data in each packet to one DNP3 frame so that we don't split data across frames.
-	serverMaxDataLen = 232 // 256 + 5 'free' DL bytes - 'overhead' for DL + T + A + our length object + data header
+	serverMaxDataLen = 232 // 256 + 5 'free' DL bytes - 'overhead' (DL + T + A + our length object + data header)
 	clientMaxDataLen = 184 // 80% of above, because each data object needs an extra event status byte
 	// Signal bytes for DNP3 messages
 	// Primary (client -> server).
@@ -58,6 +59,10 @@ var (
 
 // shell initiates an interactive shell session over the provided stream.
 func shell(command string, stream dnp3Stream, maxDataLen int) error {
+	if runtime.GOOS == "windows" {
+		return errors.New("shell is not supported on Windows")
+	}
+
 	var c *exec.Cmd
 
 	if strings.HasSuffix(command, "bash") {

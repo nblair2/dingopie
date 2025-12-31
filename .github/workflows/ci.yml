@@ -1,4 +1,7 @@
-name: CI
+name: ci
+
+env:
+  GO_VERSION: 1.24.4
 
 on:
   pull_request:
@@ -8,22 +11,22 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/ci.yml'
+      - '.goreleaser.yml'
+      - 'Makefile'
 
 jobs:
   golangci-lint:
-    name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.24.4
+          go-version: ${{ env.GO_VERSION }}
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.7.2
 
   codespell:
-    name: codespell
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -31,15 +34,81 @@ jobs:
         with:
           ignore_words_file: .codespellignore
 
-  test:
-    name: test
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: windows
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
-          go-version: 1.24.4
-      - name: Download Go modules
-        run: go mod download
-      - name: Run integration tests
-        run: make test
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Build via GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: build --snapshot --clean --single-target
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+
+  test-linux:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+      - name: Run tests
+        shell: bash
+        run: |
+          EXECUTABLE=$(find dist/ -path "*${{ matrix.goos }}*${{ matrix.goarch }}*" -name dingopie -type f | head -n 1)
+          if [ -z "$EXECUTABLE" ]; then
+            echo "Error: Could not find dingopie binary in dist/"
+            exit 1
+          fi
+          echo "dingopie binary found at: $EXECUTABLE"
+          chmod +x $EXECUTABLE
+          make test EXECUTABLE=$EXECUTABLE
+
+  test-windows:
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-windows-amd64
+          path: dist/
+      - name: Run tests
+        run: make test-windows EXECUTABLE=dist/dingopie_windows_amd64_v1/dingopie.exe
+        shell: pwsh
