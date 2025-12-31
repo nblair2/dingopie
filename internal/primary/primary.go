@@ -133,7 +133,7 @@ func clientSendProcess(wait time.Duration) error {
 		return fmt.Errorf("error during send size exchange: %w", err)
 	}
 
-	bar := internal.NewProgressBar(dataSeq.OriginalLength, ">>>> Sending: ")
+	bar := internal.NewProgressBar(int(dataSeq.OriginalLength), ">>>> Sending: ")
 	for _, chunk := range dataSeq.DataChunks {
 		time.Sleep(wait)
 

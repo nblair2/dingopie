@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/schollz/progressbar/v3"
 )
@@ -51,7 +52,7 @@ func NewRandomBytes(size int) []byte {
 // DataSequence struct chunks up our data before we send it.
 type DataSequence struct {
 	DataChunks     [][]byte // the data, split up into n chunks
-	OriginalLength int      // the original length of the data before padding
+	OriginalLength uint32   // the original length of the data before padding
 	SizeBytes      []byte   // the original length as a big-endian uint32 (ready to send)
 	NumChunks      int      // number of chunks
 	ChunkSize      int      // size of each chunk in bytes, should be multiple of 4
@@ -63,17 +64,18 @@ func NewDataSequence(data []byte, objects int) (DataSequence, error) {
 	// TODO this is hardcoded based on both client send and server send using 4 byte objects
 	const objectSize = 4
 
-	dataLen := len(data)
-	if dataLen > 0xFFFFFFFF {
+	// cast to uint64 to check for overflow before continuing
+	if uint64(len(data)) > math.MaxUint32 {
 		return DataSequence{}, fmt.Errorf(
 			"data length %d exceeds maximum of 4,294,967,295 bytes",
-			dataLen,
+			len(data),
 		)
 	}
+	//nolint:gosec // G115 overflow checked above
+	dataLen := uint32(len(data))
 
 	sizeBytes := make([]byte, objectSize)
-
-	binary.BigEndian.PutUint32(sizeBytes, uint32(dataLen))
+	binary.BigEndian.PutUint32(sizeBytes, dataLen)
 
 	chunkSize := objects * objectSize
 	data = PadDataToChunkSize(data, chunkSize)

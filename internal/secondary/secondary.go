@@ -125,7 +125,7 @@ func serverProcess() error {
 		return fmt.Errorf("error during handshake: %w", err)
 	}
 
-	bar := internal.NewProgressBar(dataSeq.OriginalLength, ">>>> Sending: ")
+	bar := internal.NewProgressBar(int(dataSeq.OriginalLength), ">>>> Sending: ")
 
 	for _, chunk := range dataSeq.DataChunks {
 		_, err := internal.ServerExchange(
