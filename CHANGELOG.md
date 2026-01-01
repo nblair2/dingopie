@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.0](https://github.com/nblair2/dingopie/compare/v1.0.2...v2.0.0) (2026-01-01)
+
+
+### doc
+
+* documentation on primary, secondary, shell ([b58d92a](https://github.com/nblair2/dingopie/commit/b58d92aa76d0e1d8f89b754686f9461085fb82ea))
+
+
+### Features
+
+* client send / server receive ([5f191e9](https://github.com/nblair2/dingopie/commit/5f191e9bf8edc012028b1e025c9e5c3d9f8dd096))
+* direct shell ([d4d2d30](https://github.com/nblair2/dingopie/commit/d4d2d30d1e44117dd6bee1a78f2415ad54da07b7))
+
+
+### Code Refactoring
+
+* cmd and internal, modular commands ([165cca0](https://github.com/nblair2/dingopie/commit/165cca0713158a35424bb1d6d0f6db0ece617b67))
+
 ## [1.0.2](https://github.com/nblair2/dingopie/compare/v1.0.1...v1.0.2) (2025-10-27)
 
 
