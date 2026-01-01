@@ -7,7 +7,7 @@ require (
 	github.com/nblair2/go-dnp3 v1.0.1
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/term v0.37.0
+	golang.org/x/term v0.38.0
 )
 
 require (
