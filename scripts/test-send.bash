@@ -8,10 +8,10 @@ test_type="${1:-primary}"
 case "$test_type" in
   primary)
     server_args="receive --file test/out.txt"
-    client_args="send --file test/in.txt --objects $(shuf -i 4-48 -n 1)"
+    client_args="send --file test/in.txt --points $(shuf -i 4-48 -n 1)"
     ;;
   secondary)
-    server_args="send --file test/in.txt --objects $(shuf -i 4-60 -n 1)"
+    server_args="send --file test/in.txt --points $(shuf -i 4-60 -n 1)"
     client_args="receive --file test/out.txt"
     ;;
   *)
@@ -50,15 +50,13 @@ cat test/server.log
 
 echo "--> Verifying outputs match"
 if [ -f test/out.txt ] && cmp -s test/in.txt test/out.txt; then
-  echo "==> PASSED"
-  rc=0
-else
-  echo "==> FAILED"
-  rc=1
+    echo "==> PASSED"
+    echo "--> Cleaning up"
+    rm -rf test
+    echo "==> Complete"
+    exit 0
 fi
 
-echo "--> Cleaning up"
-rm -rf test
+echo "==> FAILED"
 echo "==> Complete"
-
-exit $rc
+exit 1

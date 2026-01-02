@@ -89,7 +89,7 @@ func shell(command string, stream dnp3Stream, maxDataLen int) error {
 
 	_, _ = io.CopyBuffer(stream, ptmx, buf)
 
-	fmt.Printf(">> Shell session ended.\n")
+	fmt.Printf(">> Shell session ended\n")
 
 	return nil
 }
@@ -235,7 +235,7 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 
 		encData := make([]byte, len(padded))
 		ds.txCipher.XORKeyStream(encData, padded)
-		// If this is a client to server, the objects need an extra event status byte
+		// If this is a client to server, the points need an extra event status byte
 		if ds.primary {
 			sizeBytes, err = internal.InsertPeriodicBytes(sizeBytes, []byte{0x00}, 2, 2)
 			if err != nil {
@@ -373,7 +373,7 @@ func ServerConnect(key, ip string, port int) error {
 	}
 	defer conn.Close()
 
-	fmt.Printf(">>>> Connection from %s\n", conn.RemoteAddr().String())
+	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
 	fmt.Print(internal.Banner)
 
 	stream := newServerStream(key, conn)
@@ -397,7 +397,7 @@ func ServerShell(command, key, ip string, port int) error {
 	}
 	defer conn.Close()
 
-	fmt.Printf(">>>> Connection from %s\n", conn.RemoteAddr().String())
+	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
 	stream := newServerStream(key, conn)
 
 	return shell(command, stream, serverMaxDataLen)

@@ -2,7 +2,7 @@
 // server acks with random data, then the client sends the size (in bytes) of the data to be sent (before padding).
 // The size allows the server to strip any padding after the transfer is complete. After this 'handshake' the client
 // periodically sends 'Send Data' requests to the server. The interval between these requests is configurable, with
-// the 'wait' flag. The client also determines the size of each data 'chunk' to send with the 'objects' flag. The
+// the 'wait' flag. The client also determines the size of each data 'chunk' to send with the 'points' flag. The
 // server responds to each requests by echoing the same data back (acknowledging the CROB). Once the client has
 // transferred all of its data (and perhaps a little padding), it sends a disconnect message containing some random
 // bytes. The server acks the disconnect and the connection is closed.
@@ -64,10 +64,10 @@ type recvResult struct {
 }
 
 // ClientSend - dingopie client direct send.
-func ClientSend(ip string, port int, data []byte, wait time.Duration, objects int) error {
+func ClientSend(ip string, port int, data []byte, wait time.Duration, points int) error {
 	var err error
 
-	dataSeq, err = internal.NewDataSequence(data, objects)
+	dataSeq, err = internal.NewDataSequence(data, points)
 	if err != nil {
 		return fmt.Errorf("error creating data sequence: %w", err)
 	}
@@ -133,7 +133,7 @@ func clientSendProcess(wait time.Duration) error {
 		return fmt.Errorf("error during send size exchange: %w", err)
 	}
 
-	bar := internal.NewProgressBar(int(dataSeq.OriginalLength), ">>>> Sending: ")
+	bar := internal.NewProgressBar(int(dataSeq.OriginalLength), "\tSending:\t")
 	for _, chunk := range dataSeq.DataChunks {
 		time.Sleep(wait)
 
@@ -200,7 +200,7 @@ func ServerReceive(ip string, port int) ([]byte, error) {
 	fmt.Printf(">> Listening on %s\n", socket)
 
 	conn, err := ln.Accept()
-	fmt.Printf(">>>> Client connected: %s\n", conn.RemoteAddr().String())
+	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
 
 	if err != nil {
 		return nil, fmt.Errorf("error accepting connection: %w", err)
@@ -267,7 +267,7 @@ func serverReceiveProcess() recvResult {
 	size := int(binary.BigEndian.Uint32(sizeBytes))
 
 	// Receive data loop
-	bar := internal.NewProgressBar(size, ">>>> Receiving: ")
+	bar := internal.NewProgressBar(size, "\tReceiving:\t")
 
 	for len(data) < size {
 		recvDataSlice, err := serverExchangeAck(sendData, ackData)

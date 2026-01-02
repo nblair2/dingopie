@@ -7,10 +7,10 @@ Set-Location (Resolve-Path "$PSScriptRoot\..")
 switch ($TestType) {
     "primary" {
         $ServerArgs = "receive --file test\out.txt"
-        $ClientArgs = "send --file test\in.txt --objects $(Get-Random -Minimum 4 -Maximum 48)"
+        $ClientArgs = "send --file test\in.txt --points $(Get-Random -Minimum 4 -Maximum 48)"
     }
     "secondary" {
-        $ServerArgs = "send --file test\in.txt --objects $(Get-Random -Minimum 4 -Maximum 60)"
+        $ServerArgs = "send --file test\in.txt --points $(Get-Random -Minimum 4 -Maximum 60)"
         $ClientArgs = "receive --file test\out.txt"
     }
     default {

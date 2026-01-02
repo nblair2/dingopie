@@ -135,10 +135,10 @@ linters:
       - linters:
           - errcheck
         text: cmd\.Help
-      - linters:
-          - revive
-        text: "'args' seems to be unused"
-        path: cmd/
+      # - linters:
+      #     - revive
+      #   text: "'args' seems to be unused"
+      #   path: cmd/
 
   disable:
     - depguard

@@ -58,11 +58,11 @@ type DataSequence struct {
 	ChunkSize      int      // size of each chunk in bytes, should be multiple of 4
 }
 
-// NewDataSequence creates a DataSequence from raw data and the number of objects per chunk.
-func NewDataSequence(data []byte, objects int) (DataSequence, error) {
+// NewDataSequence creates a DataSequence from raw data and the number of points per chunk.
+func NewDataSequence(data []byte, points int) (DataSequence, error) {
 	var chunks [][]byte
-	// TODO this is hardcoded based on both client send and server send using 4 byte objects
-	const objectSize = 4
+	// TODO this is hardcoded based on both client send and server send using 4 byte points
+	const pointsize = 4
 
 	// cast to uint64 to check for overflow before continuing
 	if uint64(len(data)) > math.MaxUint32 {
@@ -74,10 +74,10 @@ func NewDataSequence(data []byte, objects int) (DataSequence, error) {
 	//nolint:gosec // G115 overflow checked above
 	dataLen := uint32(len(data))
 
-	sizeBytes := make([]byte, objectSize)
+	sizeBytes := make([]byte, pointsize)
 	binary.BigEndian.PutUint32(sizeBytes, dataLen)
 
-	chunkSize := objects * objectSize
+	chunkSize := points * pointsize
 	data = PadDataToChunkSize(data, chunkSize)
 
 	paddedDataLen := len(data)
