@@ -113,7 +113,7 @@ linters:
     # - varnamelen
     - wastedassign
     - whitespace
-    # - wrapcheck
+    - wrapcheck
     - wsl_v5
     - zerologlint
 
@@ -132,13 +132,6 @@ linters:
       - linters:
           - errcheck
         text: \.Close
-      - linters:
-          - errcheck
-        text: cmd\.Help
-      - linters:
-          - revive
-        text: "'args' seems to be unused"
-        path: cmd/
 
   disable:
     - depguard
@@ -150,7 +143,6 @@ linters:
     - mnd
     - noctx
     - varnamelen
-    - wrapcheck
 
 formatters:
   enable:

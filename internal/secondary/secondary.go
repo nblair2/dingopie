@@ -3,7 +3,7 @@
 // This size is essential so that the client knows how much of the received data to 'throw out' after the end of
 // transfer. After this 'handshake' the client periodically polls the server to 'Get Data'. The interval between these
 // polls is configurable, the 'wait' flag. The server responds to each of these requests with a 'chunk' of data.
-// The size of these chunks is configurable, the 'objects' flag will determine how many 4-byte objects to send in each
+// The size of these chunks is configurable, the 'points' flag will determine how many 4-byte points to send in each
 // response. Once the server has sent all of its data (and perhaps a little padding), it responds to the next 'Get
 // Data' with a disconnect message containing some random bytes.
 //
@@ -53,10 +53,10 @@ var (
 // ==================================================================
 
 // ServerSend - dingopie server direct send.
-func ServerSend(ip string, port int, data []byte, objects int) error {
+func ServerSend(ip string, port int, data []byte, points int) error {
 	var err error
 
-	dataSeq, err = internal.NewDataSequence(data, objects)
+	dataSeq, err = internal.NewDataSequence(data, points)
 	if err != nil {
 		return fmt.Errorf("error creating data sequence: %w", err)
 	}
@@ -76,7 +76,7 @@ func ServerSend(ip string, port int, data []byte, objects int) error {
 	fmt.Printf(">> Listening on %s\n", socket)
 
 	conn, err := ln.Accept()
-	fmt.Printf(">>>> Client connected: %s\n", conn.RemoteAddr().String())
+	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
 
 	if err != nil {
 		return fmt.Errorf("error accepting connection: %w", err)
@@ -125,7 +125,7 @@ func serverProcess() error {
 		return fmt.Errorf("error during handshake: %w", err)
 	}
 
-	bar := internal.NewProgressBar(int(dataSeq.OriginalLength), ">>>> Sending: ")
+	bar := internal.NewProgressBar(int(dataSeq.OriginalLength), "\tSending:\t")
 
 	for _, chunk := range dataSeq.DataChunks {
 		_, err := internal.ServerExchange(
@@ -218,7 +218,7 @@ func clientReceiveProcess(wait time.Duration) recvResult {
 	}
 
 	size := int(binary.BigEndian.Uint32(recvData))
-	bar := internal.NewProgressBar(size, ">>>> Receiving: ")
+	bar := internal.NewProgressBar(size, "\tReceiving:\t")
 
 	for len(data) < size {
 		time.Sleep(wait)

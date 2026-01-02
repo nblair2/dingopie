@@ -89,7 +89,7 @@ func shell(command string, stream dnp3Stream, maxDataLen int) error {
 
 	_, _ = io.CopyBuffer(stream, ptmx, buf)
 
-	fmt.Printf(">> Shell session ended.\n")
+	fmt.Printf(">> Shell session ended\n")
 
 	return nil
 }
@@ -235,7 +235,7 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 
 		encData := make([]byte, len(padded))
 		ds.txCipher.XORKeyStream(encData, padded)
-		// If this is a client to server, the objects need an extra event status byte
+		// If this is a client to server, the points need an extra event status byte
 		if ds.primary {
 			sizeBytes, err = internal.InsertPeriodicBytes(sizeBytes, []byte{0x00}, 2, 2)
 			if err != nil {
@@ -277,7 +277,9 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 }
 
 func (ds dnp3Stream) Close() error {
-	return ds.conn.Close()
+	err := ds.conn.Close()
+
+	return fmt.Errorf("error closing connection: %w", err)
 }
 
 func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
@@ -326,7 +328,7 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 func ClientConnect(ip string, port int, key string) error {
 	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting: %w", err)
 	}
 	defer conn.Close()
 
@@ -342,7 +344,7 @@ func ClientConnect(ip string, port int, key string) error {
 func ClientShell(command, key, ip string, port int) error {
 	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting: %w", err)
 	}
 	defer conn.Close()
 
@@ -361,7 +363,7 @@ func ClientShell(command, key, ip string, port int) error {
 func ServerConnect(key, ip string, port int) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error starting TCP listener: %w", err)
 	}
 	defer ln.Close()
 
@@ -369,11 +371,11 @@ func ServerConnect(key, ip string, port int) error {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		return err
+		return fmt.Errorf("error accepting connection: %w", err)
 	}
 	defer conn.Close()
 
-	fmt.Printf(">>>> Connection from %s\n", conn.RemoteAddr().String())
+	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
 	fmt.Print(internal.Banner)
 
 	stream := newServerStream(key, conn)
@@ -385,7 +387,7 @@ func ServerConnect(key, ip string, port int) error {
 func ServerShell(command, key, ip string, port int) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error starting TCP listener: %w", err)
 	}
 	defer ln.Close()
 
@@ -393,11 +395,11 @@ func ServerShell(command, key, ip string, port int) error {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		return err
+		return fmt.Errorf("error accepting connection: %w", err)
 	}
 	defer conn.Close()
 
-	fmt.Printf(">>>> Connection from %s\n", conn.RemoteAddr().String())
+	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
 	stream := newServerStream(key, conn)
 
 	return shell(command, stream, serverMaxDataLen)
