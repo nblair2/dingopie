@@ -39,7 +39,12 @@ var (
 func getData(file string, args []string) ([]byte, error) {
 	if file != "" {
 		//nolint: gosec // G304 opening file provided by user
-		return os.ReadFile(file)
+		b, err := os.ReadFile(file)
+		if err != nil {
+			return nil, fmt.Errorf("error reading file: %w", err)
+		}
+
+		return b, nil
 	} else if len(args) > 0 {
 		data := []byte(args[0])
 

@@ -93,7 +93,11 @@ func ClientSend(ip string, port int, data []byte, wait time.Duration, points int
 		case err := <-connErrChan:
 			return fmt.Errorf("error with connection: %w", err)
 		case err := <-procErrChan:
-			return err
+			if err != nil {
+				return fmt.Errorf("error with process: %w", err)
+			}
+
+			return nil
 		}
 	}
 }
@@ -167,7 +171,7 @@ func clientSendProcess(wait time.Duration) error {
 func clientExchangeAck(headers, data [][]byte) error {
 	recvData, err := internal.ClientExchange(&frame, headers, headers, data, sendChan, recvChan)
 	if err != nil {
-		return err
+		return fmt.Errorf("error during client exchange: %w", err)
 	}
 
 	for i, d := range data {
@@ -303,12 +307,12 @@ func serverReceiveProcess() recvResult {
 func serverExchangeAck(expectedHeaders, responseHeaders [][]byte) ([][]byte, error) {
 	data, err := internal.ReceiveAndValidate(recvChan, expectedHeaders)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error receiving and validating data: %w", err)
 	}
 
 	err = internal.SendMessage(&frame, responseHeaders, data, sendChan)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error sending ack: %w", err)
 	}
 
 	return data, nil

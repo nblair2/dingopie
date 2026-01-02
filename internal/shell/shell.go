@@ -277,7 +277,9 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 }
 
 func (ds dnp3Stream) Close() error {
-	return ds.conn.Close()
+	err := ds.conn.Close()
+
+	return fmt.Errorf("error closing connection: %w", err)
 }
 
 func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
@@ -326,7 +328,7 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 func ClientConnect(ip string, port int, key string) error {
 	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting: %w", err)
 	}
 	defer conn.Close()
 
@@ -342,7 +344,7 @@ func ClientConnect(ip string, port int, key string) error {
 func ClientShell(command, key, ip string, port int) error {
 	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error connecting: %w", err)
 	}
 	defer conn.Close()
 
@@ -361,7 +363,7 @@ func ClientShell(command, key, ip string, port int) error {
 func ServerConnect(key, ip string, port int) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error starting TCP listener: %w", err)
 	}
 	defer ln.Close()
 
@@ -369,7 +371,7 @@ func ServerConnect(key, ip string, port int) error {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		return err
+		return fmt.Errorf("error accepting connection: %w", err)
 	}
 	defer conn.Close()
 
@@ -385,7 +387,7 @@ func ServerConnect(key, ip string, port int) error {
 func ServerShell(command, key, ip string, port int) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return err
+		return fmt.Errorf("error starting TCP listener: %w", err)
 	}
 	defer ln.Close()
 
@@ -393,7 +395,7 @@ func ServerShell(command, key, ip string, port int) error {
 
 	conn, err := ln.Accept()
 	if err != nil {
-		return err
+		return fmt.Errorf("error accepting connection: %w", err)
 	}
 	defer conn.Close()
 

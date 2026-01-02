@@ -306,32 +306,16 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 		result = append(result, header...)
 
 		if pointSize != 0 {
-			if len(data)%pointSize != 0 {
-				return nil, fmt.Errorf(
-					"data length %d not padded to multiple of %d for object header %v",
-					len(data),
-					pointSize,
-					header,
-				)
-			}
-
 			if header[2] != 0x00 {
 				return nil, errors.New("only Qualifier Field 0 is supported")
 			}
 
-			size := len(data) / pointSize
-			if size > 255 {
-				return nil, fmt.Errorf(
-					"data length %d results in %d objects, exceeds max of 255 for object header %v",
-					len(data),
-					size,
-					header,
-				)
+			start, end, err := calculateStartEndIndices(data, pointSize)
+			if err != nil {
+				return nil, fmt.Errorf("error calculating start and end indices: %w", err)
 			}
-			//nolint:gosec // G404: Just need a random number, not cryptographically relevant
-			start := rand.Intn(256 - size)
-			end := start + size - 1
-			result = append(result, byte(start), byte(end))
+
+			result = append(result, start, end)
 			result = append(result, data...)
 		} else if len(data) > 0 {
 			return nil, errors.New("data provided for signal that does not take data")
@@ -348,7 +332,36 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 	incrementDNP3Sequence(frame)
 	frame.Application.SetData(appData)
 
-	return frame.ToBytes()
+	b, err := frame.ToBytes()
+	if err != nil {
+		return nil, fmt.Errorf("error converting DNP3 frame to bytes: %w", err)
+	}
+
+	return b, nil
+}
+
+func calculateStartEndIndices(data []byte, pointSize int) (byte, byte, error) {
+	if len(data)%pointSize != 0 {
+		return 0, 0, fmt.Errorf(
+			"data length %d not padded to multiple of %d",
+			len(data),
+			pointSize,
+		)
+	}
+
+	size := len(data) / pointSize
+	if size > 255 {
+		return 0, 0, fmt.Errorf(
+			"data length %d results in %d objects, exceeds max of 255",
+			len(data),
+			size,
+		)
+	}
+	//nolint:gosec // G404: Just need a random number, not cryptographically relevant
+	start := rand.Intn(256 - size)
+	end := start + size - 1
+
+	return byte(start), byte(end), nil
 }
 
 func incrementDNP3Sequence(frame *dnp3.Frame) {
