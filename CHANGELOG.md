@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1](https://github.com/nblair2/dingopie/compare/v2.0.0...v2.0.1) (2026-01-02)
+
+
+### Bug Fixes
+
+* **cli:** update CLI descriptions, help, format ([065c36b](https://github.com/nblair2/dingopie/commit/065c36b655d52bd33ae3b37be4cd4130843dd2b8)), closes [#22](https://github.com/nblair2/dingopie/issues/22)
+* **cli:** update help template, uniform descriptions ([9f2a600](https://github.com/nblair2/dingopie/commit/9f2a6009dd3a71ff9af73875ab320462cf7c4cd5))
+
 ## [2.0.0](https://github.com/nblair2/dingopie/compare/v1.0.2...v2.0.0) (2026-01-01)
 
 
