@@ -1,14 +1,14 @@
 package cmd
 
 import (
-	"dingopie/internal"
-	"dingopie/internal/primary"
-	"dingopie/internal/secondary"
-	"dingopie/internal/shell"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/nblair2/dingopie/internal"
+	"github.com/nblair2/dingopie/internal/primary"
+	"github.com/nblair2/dingopie/internal/secondary"
+	"github.com/nblair2/dingopie/internal/shell"
 	"github.com/spf13/cobra"
 )
 

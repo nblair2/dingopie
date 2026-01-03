@@ -1,4 +1,4 @@
-module dingopie
+module github.com/nblair2/dingopie
 
 go 1.24.4
 

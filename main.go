@@ -1,7 +1,7 @@
 // package main of the dingopie covert channel
 package main
 
-import "dingopie/cmd"
+import "github.com/nblair2/dingopie/cmd"
 
 func main() {
 	cmd.Execute()
