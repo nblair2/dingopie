@@ -11,7 +11,6 @@ builds:
     goos:
       - linux
       - windows
-      - openbsd
     goarch:
       - "386"
       - amd64
@@ -30,17 +29,13 @@ builds:
     gomips:
       - hardfloat
       - softfloat
+    go386:
+      - sse2
+      - softfloat
     ignore:
       # https://github.com/golang/go/issues/70705
       - goos: windows
         goarch: arm
-
-nfpms:
-  - maintainer: "https://github.com/nblair2"
-    formats:
-      - deb
-      - rpm
-      - apk
 
 archives:
   - formats:

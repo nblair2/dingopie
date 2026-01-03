@@ -2,7 +2,6 @@
 package cmd
 
 import (
-	"dingopie/internal"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nblair2/dingopie/internal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

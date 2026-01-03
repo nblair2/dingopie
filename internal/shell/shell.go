@@ -20,7 +20,6 @@ package shell
 import (
 	"bytes"
 	"crypto/cipher"
-	"dingopie/internal"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -34,6 +33,7 @@ import (
 	"strings"
 
 	"github.com/creack/pty"
+	"github.com/nblair2/dingopie/internal"
 	"github.com/nblair2/go-dnp3/dnp3"
 	"golang.org/x/term"
 )
