@@ -31,8 +31,14 @@ var serverDirectSendCmd = &cobra.Command{
 	Use:     "send",
 	Short:   "send data to client",
 	Run: func(_ *cobra.Command, args []string) {
-		if points > 60 {
-			fmt.Println("Error: points cannot be greater than 60")
+		if 0 >= points || points > 60 {
+			fmt.Println("Error: points cannot be less than 0 or greater than 60")
+
+			return
+		}
+
+		if -1 > pointVariance || pointVariance > 1 {
+			fmt.Println("Error: point-variance must be between -1 and 1")
 
 			return
 		}
@@ -43,9 +49,7 @@ var serverDirectSendCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		data = internal.XorData(key, data)
-
-		err = secondary.ServerSend(serverIP, serverPort, data, points)
+		err = secondary.ServerSend(serverIP, serverPort, key, data, points, pointVariance)
 		if err != nil {
 			fmt.Printf("Error with direct send: %v\n", err)
 			os.Exit(1)
@@ -69,7 +73,7 @@ var serverDirectReceiveCmd = &cobra.Command{
 			defer f.Close()
 		}
 
-		data, err := primary.ServerReceive(serverIP, serverPort)
+		data, err := primary.ServerReceive(serverIP, serverPort, key)
 		if err != nil {
 			fmt.Printf(
 				"Error with direct receive: %v\nAttempting to output what data we have\n",
@@ -77,7 +81,6 @@ var serverDirectReceiveCmd = &cobra.Command{
 			)
 		}
 
-		data = internal.XorData(key, data)
 		if file != "" {
 			_, err := f.Write(data)
 			if err != nil {
@@ -97,7 +100,7 @@ var serverDirectShellCmd = &cobra.Command{
 	Use:     "shell",
 	Short:   "run a pty shell on this device",
 	Run: func(_ *cobra.Command, _ []string) {
-		err := shell.ServerShell(command, key, serverIP, serverPort)
+		err := shell.ServerShell(serverIP, serverPort, key, command)
 		if err != nil {
 			fmt.Printf("Error opening shell: %v\n", err)
 			os.Exit(1)
@@ -110,7 +113,7 @@ var serverDirectConnectCmd = &cobra.Command{
 	Use:     "connect",
 	Short:   "connect to a pty shell running on client",
 	Run: func(_ *cobra.Command, _ []string) {
-		err := shell.ServerConnect(key, serverIP, serverPort)
+		err := shell.ServerConnect(serverIP, serverPort, key)
 		if err != nil {
 			fmt.Printf("Error connecting to shell: %v\n", err)
 			os.Exit(1)
@@ -135,6 +138,9 @@ func init() {
 		StringVarP(&file, "file", "f", "", "file to write data to (default is to stdout)")
 	serverDirectSendCmd.PersistentFlags().
 		IntVarP(&points, "points", "o", 8, "number of 4-byte points to send in each message (max 60)")
+	serverDirectSendCmd.PersistentFlags().
+		Float32VarP(&pointVariance, "point-variance", "r", 0.25,
+			"variance of points to send in each message (e.g., 0.25 = ±25%)")
 	serverDirectShellCmd.PersistentFlags().
 		StringVarP(&command, "command", "c", os.Getenv("SHELL"), "command to run")
 }

@@ -8,7 +8,7 @@ rm -rf test
 mkdir -p test
 
 in_size=$(shuf -i 128-1024 -n 1)
-key_size=$(shuf -i 8-128 -n 1)
+key_size=$(shuf -i 8-32 -n 1)
 head -c "$in_size" /dev/urandom | base64 > test/in.txt
 head -c "$key_size" /dev/urandom | base64 > test/key.txt
 KEY="$(cat test/key.txt)"

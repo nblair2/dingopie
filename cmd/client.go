@@ -39,8 +39,14 @@ var clientDirectSendCmd = &cobra.Command{
 	Use:     "send",
 	Short:   "send data to server",
 	Run: func(_ *cobra.Command, args []string) {
-		if points > 48 {
-			fmt.Println("Error: points cannot be greater than 48")
+		if 0 >= points || points > 48 {
+			fmt.Println("Error: points cannot be less than 0 or greater than 48")
+
+			return
+		}
+
+		if -1 > pointVariance || pointVariance > 1 {
+			fmt.Println("Error: point-variance must be between -1 and 1")
 
 			return
 		}
@@ -51,9 +57,7 @@ var clientDirectSendCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		data = internal.XorData(key, data)
-
-		err = primary.ClientSend(serverIP, serverPort, data, wait, points)
+		err = primary.ClientSend(serverIP, serverPort, key, data, points, pointVariance, wait)
 		if err != nil {
 			fmt.Printf(
 				"Error with direct send: %v", err)
@@ -78,7 +82,7 @@ var clientDirectReceiveCmd = &cobra.Command{
 			defer f.Close()
 		}
 
-		data, err := secondary.ClientReceive(serverIP, serverPort, wait)
+		data, err := secondary.ClientReceive(serverIP, serverPort, key, wait)
 		if err != nil {
 			fmt.Printf(
 				"Error with direct receive: %v\nAttempting to output what data we have\n",
@@ -86,7 +90,6 @@ var clientDirectReceiveCmd = &cobra.Command{
 			)
 		}
 
-		data = internal.XorData(key, data)
 		if file != "" {
 			_, err := f.Write(data)
 			if err != nil {
@@ -106,7 +109,7 @@ var clientDirectShellCmd = &cobra.Command{
 	Use:     "shell",
 	Short:   "run a pty shell on this device",
 	Run: func(_ *cobra.Command, _ []string) {
-		err := shell.ClientShell(command, key, serverIP, serverPort)
+		err := shell.ClientShell(serverIP, serverPort, key, command)
 		if err != nil {
 			fmt.Printf("Error with direct shell: %v\n", err)
 			os.Exit(1)
@@ -145,6 +148,9 @@ func init() {
 		StringVarP(&file, "file", "f", "", "file to write data to (default is to stdout)")
 	clientDirectSendCmd.PersistentFlags().
 		IntVarP(&points, "points", "o", 8, "number of 4-byte points to send in each message (max 48)")
+	clientDirectSendCmd.PersistentFlags().
+		Float32VarP(&pointVariance, "point-variance", "r", 0.25,
+			"variance of points to send in each message (e.g., 0.25 = ±25%)")
 	clientDirectShellCmd.PersistentFlags().
 		StringVarP(&command, "command", "c", os.Getenv("SHELL"), "command to run")
 }

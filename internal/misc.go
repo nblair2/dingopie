@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 
 	"github.com/schollz/progressbar/v3"
 )
@@ -27,15 +28,6 @@ func NewCipherStream(password string) cipher.Stream {
 	return stream
 }
 
-// XorData performs XOR encryption/decryption on the input data using a key derived from the provided password.
-func XorData(password string, data []byte) []byte {
-	stream := NewCipherStream(password)
-	out := make([]byte, len(data))
-	stream.XORKeyStream(out, data)
-
-	return out
-}
-
 // NewRandomBytes generates a slice of random bytes of the specified size.
 func NewRandomBytes(size int) []byte {
 	b := make([]byte, size)
@@ -43,6 +35,35 @@ func NewRandomBytes(size int) []byte {
 	rand.Read(b)
 
 	return b
+}
+
+// GetPointVarianceRange calculates the low and high range of points based on the given variance.
+func GetPointVarianceRange(points int, variance float32, maxPoints int) (int, int) {
+	var pointsLow, pointsHigh int
+
+	switch {
+	case variance <= 0:
+		return points, points
+	case variance >= 1:
+		return points, max(2*points, maxPoints)
+	}
+
+	pointsLow = int(float32(points) * (1 - variance))
+	pointsLow = max(pointsLow, 1)
+	pointsHigh = int(float32(points) * (1 + variance))
+	pointsHigh = min(pointsHigh, maxPoints)
+
+	return pointsLow, pointsHigh
+}
+
+func getRandomInt(low, high int) int {
+	if low >= high {
+		return low
+	}
+
+	biggy, _ := rand.Int(rand.Reader, big.NewInt(int64(high-low)))
+
+	return int(biggy.Int64()) + low
 }
 
 // ==================================================================
@@ -54,16 +75,10 @@ type DataSequence struct {
 	DataChunks     [][]byte // the data, split up into n chunks
 	OriginalLength uint32   // the original length of the data before padding
 	SizeBytes      []byte   // the original length as a big-endian uint32 (ready to send)
-	NumChunks      int      // number of chunks
-	ChunkSize      int      // size of each chunk in bytes, should be multiple of 4
 }
 
 // NewDataSequence creates a DataSequence from raw data and the number of points per chunk.
-func NewDataSequence(data []byte, points int) (DataSequence, error) {
-	var chunks [][]byte
-	// TODO this is hardcoded based on both client send and server send using 4 byte points
-	const pointsize = 4
-
+func NewDataSequence(key string, data []byte, pointsLow, pointsHigh int) (DataSequence, error) {
 	// cast to uint64 to check for overflow before continuing
 	if uint64(len(data)) > math.MaxUint32 {
 		return DataSequence{}, fmt.Errorf(
@@ -74,23 +89,39 @@ func NewDataSequence(data []byte, points int) (DataSequence, error) {
 	//nolint:gosec // G115 overflow checked above
 	dataLen := uint32(len(data))
 
+	// Now that we may continue
+	var chunks [][]byte
+
+	const pointsize = 4 // TODO this is hardcoded based on both client send and server send using 4 byte points
+
+	txCipher := NewCipherStream(key)
+
 	sizeBytes := make([]byte, pointsize)
 	binary.BigEndian.PutUint32(sizeBytes, dataLen)
 
-	chunkSize := points * pointsize
-	data = PadDataToChunkSize(data, chunkSize)
+	encSizeBytes := make([]byte, pointsize)
+	txCipher.XORKeyStream(encSizeBytes, sizeBytes)
 
-	paddedDataLen := len(data)
-	for i := 0; i < paddedDataLen; i += chunkSize {
-		chunks = append(chunks, data[i:i+chunkSize])
+	for i := 0; i < len(data); {
+		numPoints := getRandomInt(pointsLow, pointsHigh)
+		chunkSize := numPoints * pointsize
+		end := min(i+chunkSize, len(data))
+
+		chunk := data[i:end]
+		if len(chunk) < chunkSize {
+			chunk = PadDataToChunkSize(chunk, chunkSize)
+		}
+
+		encChunk := make([]byte, len(chunk))
+		txCipher.XORKeyStream(encChunk, chunk)
+		chunks = append(chunks, encChunk)
+		i += chunkSize
 	}
 
 	return DataSequence{
 		DataChunks:     chunks,
 		OriginalLength: dataLen,
-		SizeBytes:      sizeBytes,
-		NumChunks:      len(chunks),
-		ChunkSize:      chunkSize,
+		SizeBytes:      encSizeBytes,
 	}, nil
 }
 

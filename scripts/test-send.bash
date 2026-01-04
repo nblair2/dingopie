@@ -24,7 +24,7 @@ rm -rf test
 mkdir -p test
 
 in_size=$(shuf -i 256-8192 -n 1)
-key_size=$(shuf -i 8-128 -n 1)
+key_size=$(shuf -i 8-32 -n 1)
 head -c "$in_size" /dev/urandom | base64 > test/in.txt
 head -c "$key_size" /dev/urandom | base64 > test/key.txt
 
@@ -36,7 +36,7 @@ sleep 1
 
 echo "--> Starting client"
 wait_ms=$(shuf -i 10-500 -n 1)
-"$EXECUTABLE" client direct $client_args --key "$KEY" --server-ip 127.0.0.1 --wait "${wait_ms}ms"
+"$EXECUTABLE" client direct $client_args --key "$KEY" --server-ip 127.0.0.1 --wait "${wait_ms}ms" | tee test/client.log
 sleep 1
 
 if kill -0 "$server_pid" 2>/dev/null; then
