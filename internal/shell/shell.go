@@ -341,7 +341,7 @@ func ClientConnect(ip string, port int, key string) error {
 }
 
 // ClientShell - dingopie client direct shell.
-func ClientShell(command, key, ip string, port int) error {
+func ClientShell(ip string, port int, key, command string) error {
 	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
@@ -360,7 +360,7 @@ func ClientShell(command, key, ip string, port int) error {
 // ==================================================================
 
 // ServerConnect - dingopie server direct connect.
-func ServerConnect(key, ip string, port int) error {
+func ServerConnect(ip string, port int, key string) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return fmt.Errorf("error starting TCP listener: %w", err)
@@ -384,7 +384,7 @@ func ServerConnect(key, ip string, port int) error {
 }
 
 // ServerShell - dingopie server direct shell.
-func ServerShell(command, key, ip string, port int) error {
+func ServerShell(ip string, port int, key, command string) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return fmt.Errorf("error starting TCP listener: %w", err)

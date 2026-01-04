@@ -68,7 +68,7 @@ if (Test-Path .\test) {
 New-Item -ItemType Directory .\test | Out-Null
 
 Write-RandomBase64File ".\test\in.txt"  (Get-Random -Minimum 256 -Maximum 8193)
-Write-RandomBase64File ".\test\key.txt" (Get-Random -Minimum 8   -Maximum 129)
+Write-RandomBase64File ".\test\key.txt" (Get-Random -Minimum 8   -Maximum 33)
 
 Write-Host "--> Starting server in background"
 $key = Get-Content -Raw .\test\key.txt

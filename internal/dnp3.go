@@ -156,7 +156,7 @@ func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 		Transport: dnp3.Transport{
 			Final: true,
 			First: true,
-			//nolint:gosec // G404: Just need a random sequence, not cryptographically relevant
+			//nolint:gosec // G404: not cryptographically relevant, G115: clamped
 			Sequence: uint8(rand.Intn(63)),
 		},
 	}
@@ -167,7 +167,7 @@ func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 				Final:       true,
 				Confirm:     false,
 				Unsolicited: false,
-				//nolint:gosec // G404: Just need a random sequence, not cryptographically relevant
+				//nolint:gosec // G404: not cryptographically relevant, G115: clamped
 				Sequence: uint8(rand.Intn(15)),
 			},
 			FunctionCode: dnp3.Read,
@@ -179,7 +179,7 @@ func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 				Final:       true,
 				Confirm:     false,
 				Unsolicited: false,
-				//nolint:gosec // G404: Just need a random sequence, not cryptographically relevant
+				//nolint:gosec // G404: not cryptographically relevant, G115: clamped
 				Sequence: uint8(rand.Intn(15)),
 			},
 			FunctionCode:        dnp3.Response,
