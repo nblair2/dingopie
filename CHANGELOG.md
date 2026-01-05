@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/nblair2/dingopie/compare/v2.0.1...v2.1.0) (2026-01-05)
+
+
+### Features
+
+* point-variance ([#26](https://github.com/nblair2/dingopie/issues/26)) ([1095e3a](https://github.com/nblair2/dingopie/commit/1095e3ae2fd5fdea99f483cccb867e8381326f6c))
+
 ## [2.0.1](https://github.com/nblair2/dingopie/compare/v2.0.0...v2.0.1) (2026-01-02)
 
 
