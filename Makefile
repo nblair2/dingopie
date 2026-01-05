@@ -1,9 +1,9 @@
-GO_FILES     = $(shell find . -name '*.go')
-EXECUTABLE  ?= $(shell find dist/ -path "*$(shell go env GOOS)*$(shell go env GOARCH)*" -type f -name dingopie | head -n 1)
-SCRIPTS_DIR := scripts
-SEND_BASH   := $(SCRIPTS_DIR)/test-send.bash
-SHELL_BASH  := $(SCRIPTS_DIR)/test-shell.bash
-SEND_PS1    := $(SCRIPTS_DIR)/test-send.ps1
+GO_FILES            = $(shell find . -name '*.go')
+EXECUTABLE         ?= "$(shell pwd)/$(shell find dist/ -path "*$(shell go env GOOS)*$(shell go env GOARCH)*" -type f -name dingopie | head -n 1)"
+SCRIPTS_DIR        := test/scripts
+DIRECT_SEND_BASH   := $(SCRIPTS_DIR)/test-direct-send.bash
+DIRECT_SHELL_BASH  := $(SCRIPTS_DIR)/test-direct-shell.bash
+DIRECT_SEND_PS1    := $(SCRIPTS_DIR)/test-direct-send.ps1
 
 help:
 	@echo "Makefile commands:"
@@ -22,9 +22,14 @@ help:
 	@echo
 	@echo "Tests:"
 	@echo "  make test                 Run all tests on linux"
-	@echo "  make test-send            Run send/receive tests on linux"
-	@echo "  make test-shell           Run shell/connect tests on linux"
-	@echo "  make test-windows         Run Windows send/receive tests"
+	@echo "  make test-direct-send     Run direct send/receive tests on linux"
+	@echo "  make test-direct-shell    Run direct shell/connect tests on linux"
+	@echo "  make test-windows         Run Windows direct send/receive tests"
+	@echo
+	@echo "Docker (inject testing apparatus):"
+	@echo "  make docker-push          Build and push test docker image"
+	@echo "  make docker-up            Start test docker containers"
+	@echo "  make docker-down          Stop test docker containers"
 	@echo
 
 ## ------------------------- Develop -------------------------------------
@@ -33,6 +38,7 @@ setup:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.7.2
 	sudo apt-get install lsof codespell
 	go install github.com/goreleaser/goreleaser/v2@latest
+	# docker, compose, etc
 
 fix:
 	$$(go env GOPATH)/bin/golangci-lint run ./... --fix
@@ -49,7 +55,7 @@ check: lint spell
 
 clean:
 	@rm -rf dist
-	@rm -rf test/
+	@rm -rf test/results
 	@kill $$(lsof -t -i :20000) 2>/dev/null || true
 
 # Build binaries for current platform using goreleaser (fast)
@@ -64,25 +70,26 @@ release: $(GO_FILES)
 	@goreleaser build --snapshot --clean
 	@echo "=================================================================="
 
+
 ## ------------------------- Test ----------------------------------------
 
-# Default to linux tests
-test: test-send test-shell
+test: test-direct-send test-direct-shell
 
-test-send: test-send-primary test-send-secondary
+test-direct-send: test-direct-send-primary test-direct-send-secondary
 
-test-send-%:
+test-direct-send-%:
+	@echo $(EXECUTABLE)
 	@echo "=================================================================="
 	@echo "Running $@"
-	@EXECUTABLE=$(EXECUTABLE) bash $(SEND_BASH) "$*"
+	@EXECUTABLE=$(EXECUTABLE) bash $(DIRECT_SEND_BASH) "$*"
 	@echo "=================================================================="
 
-test-shell: test-shell-primary test-shell-secondary
+test-direct-shell: test-direct-shell-primary test-direct-shell-secondary
 
-test-shell-%:
+test-direct-shell-%:
 	@echo "=================================================================="
 	@echo "Running $@"
-	@EXECUTABLE=$(EXECUTABLE) bash $(SHELL_BASH) "$*"
+	@EXECUTABLE=$(EXECUTABLE) bash $(DIRECT_SHELL_BASH) "$*"
 	@echo "=================================================================="
 
 test-windows: test-windows-send
@@ -92,9 +99,21 @@ test-windows-send: test-windows-send-primary test-windows-send-secondary
 test-windows-send-%:
 	@echo "=================================================================="
 	@echo "Running $@"
-	@EXECUTABLE=$(EXECUTABLE) powershell -File $(SEND_PS1) -TestType "$*"
+	@EXECUTABLE='$(EXECUTABLE)' powershell -File $(DIRECT_SEND_PS1) -TestType "$*"
 	@echo "=================================================================="
 
 # Windows cannot run shell and we can't do cross-runner tests
 
-.PHONY: help setup hooks fix lint spell check clean build release test test-send test-shell test-windows test-windows-send
+# Inject testing with docker containers
+docker-push:
+	@echo "=================================================================="
+	@IMAGE_TAG="${IMAGE_TAG:-latest}" bash test/scripts/build-container.bash "${IMAGE_TAG}"
+	@echo "=================================================================="
+
+docker-up:
+	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml up -d
+
+docker-down:
+	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml down
+
+.PHONY: help setup hooks fix lint spell check clean build release test test-direct-send test-direct-shell test-windows test-windows-send docker-push docker-up docker-down

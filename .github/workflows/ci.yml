@@ -90,7 +90,7 @@ jobs:
       - name: Run tests
         shell: bash
         run: |
-          EXECUTABLE=$(find dist/ -path "*${{ matrix.goos }}*${{ matrix.goarch }}*" -name dingopie -type f | head -n 1)
+          EXECUTABLE=$(pwd)/$(find dist/ -path "*${{ matrix.goos }}*${{ matrix.goarch }}*" -name dingopie -type f | head -n 1)
           if [ -z "$EXECUTABLE" ]; then
             echo "Error: Could not find dingopie binary in dist/"
             exit 1
@@ -110,5 +110,9 @@ jobs:
           name: dist-windows-amd64
           path: dist/
       - name: Run tests
-        run: make test-windows EXECUTABLE=dist/dingopie_windows_amd64_v1/dingopie.exe
+        run: |
+          $exe = (Resolve-Path .\dist\dingopie_windows_amd64_v1\dingopie.exe).Path
+          $exe = $exe -replace '\\', '/'
+          echo "dingopie binary found at: $exe"
+          make test-windows EXECUTABLE="$exe"
         shell: pwsh

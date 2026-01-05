@@ -2,16 +2,28 @@ param(
     [string]$TestType = "primary"
 )
 
-Set-Location (Resolve-Path "$PSScriptRoot\..")
+$TestDir = Resolve-Path "$PSScriptRoot/.."
+Set-Location $TestDir
+
+$exePath = "..\dist\dingopie_windows_amd64\dingopie.exe" # Default relative to test/
+if ($env:EXECUTABLE) {
+    $exePath = $env:EXECUTABLE
+}
+try {
+    $exe = (Resolve-Path $exePath).Path
+} catch {
+    Write-Error "Executable not found at $exePath (PWD: $(Get-Location))"
+    exit 1
+}
 
 switch ($TestType) {
     "primary" {
-        $ServerArgs = "receive --file test\out.txt"
-        $ClientArgs = "send --file test\in.txt --points $(Get-Random -Minimum 4 -Maximum 48)"
+        $ServerArgs = "receive --file results\out.txt"
+        $ClientArgs = "send --file results\in.txt --points $(Get-Random -Minimum 4 -Maximum 48)"
     }
     "secondary" {
-        $ServerArgs = "send --file test\in.txt --points $(Get-Random -Minimum 4 -Maximum 60)"
-        $ClientArgs = "receive --file test\out.txt"
+        $ServerArgs = "send --file results\in.txt --points $(Get-Random -Minimum 4 -Maximum 60)"
+        $ClientArgs = "receive --file results\out.txt"
     }
     default {
         Write-Host "Usage: $($MyInvocation.MyCommand.Name) {primary|secondary}"
@@ -19,19 +31,13 @@ switch ($TestType) {
     }
 }
 
-function Get-Executable {
-    $path = "dist/dingopie_windows_amd64/dingopie.exe"
-    if ($env:EXECUTABLE -and $env:EXECUTABLE.Trim() -ne "") {
-        $path = $env:EXECUTABLE
-    }
-    return $path.Replace("/", "\")
-}
 
 function Write-RandomBase64File {
     param(
         [string]$Path,
         [int]$NumBytes
     )
+    $Path = Join-Path (Get-Location).Path $Path
     $bytes = New-Object byte[] $NumBytes
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $content = [Convert]::ToBase64String($bytes)
@@ -47,6 +53,7 @@ function Split-Args {
 function Get-FileSha256 {
     param([string]$Path)
     try {
+        $Path = Join-Path (Get-Location).Path $Path
         $sha256 = [System.Security.Cryptography.SHA256]::Create()
         $stream = [System.IO.File]::OpenRead($Path)
         $hash = $sha256.ComputeHash($stream)
@@ -58,21 +65,19 @@ function Get-FileSha256 {
     }
 }
 
-$exe = Get-Executable
-
 Write-Host "==> Starting test"
 
-if (Test-Path .\test) {
-    Remove-Item -Recurse -Force .\test
+if (Test-Path "results") {
+    Remove-Item -Recurse -Force "results"
 }
-New-Item -ItemType Directory .\test | Out-Null
+New-Item -ItemType Directory "results" | Out-Null
 
-Write-RandomBase64File ".\test\in.txt"  (Get-Random -Minimum 256 -Maximum 8193)
-Write-RandomBase64File ".\test\key.txt" (Get-Random -Minimum 8   -Maximum 33)
+Write-RandomBase64File "results\in.txt"  (Get-Random -Minimum 256 -Maximum 8193)
+Write-RandomBase64File "results\key.txt" (Get-Random -Minimum 8   -Maximum 33)
 
 Write-Host "--> Starting server in background"
-$key = Get-Content -Raw .\test\key.txt
-$serverCmd = "$exe server direct $ServerArgs --key `"$key`" > `".\test\server.log`" 2>&1"
+$key = Get-Content -Raw results\key.txt
+$serverCmd = "$exe server direct $ServerArgs --key `"$key`" > `"results\server.log`" 2>&1"
 $serverProc = Start-Process cmd.exe -ArgumentList "/c", $serverCmd -PassThru
 Start-Sleep 1
 
@@ -97,35 +102,31 @@ if ($serverProc -and -not $serverProc.HasExited) {
 }
 
 Write-Host "--> Server log:`n"
-if (Test-Path .\test\server.log) {
-    Get-Content .\test\server.log -Raw
+if (Test-Path "results\server.log") {
+    Get-Content "results\server.log" -Raw
 }
 
 Write-Host "`n--> Verifying outputs match"
 
-if (-not (Test-Path .\test\out.txt)) {
+if (-not (Test-Path "results\out.txt")) {
     Write-Host "==> FAILED"
-    Remove-Item -Recurse -Force .\test
+    Remove-Item -Recurse -Force "results"
     exit 1
 }
 
-$h1 = Get-FileSha256 ".\test\in.txt"
-$h2 = Get-FileSha256 ".\test\out.txt"
+$h1 = Get-FileSha256 "results\in.txt"
+$h2 = Get-FileSha256 "results\out.txt"
 
 if ($null -ne $h1 -and $h1 -eq $h2) {
     Write-Host "==> PASSED"
-    $rc = 0
-} else {
-    Write-Host "==> FAILED"
-    Write-Host "Hash 1: $h1"
-    Write-Host "Hash 2: $h2"
-    $rc = 1
+    Write-Host "--> Cleaning up"
+    Remove-Item -Recurse -Force "results"
+    Write-Host "==> Complete"
+    Start-Sleep 1
+    exit 0
 }
 
-Write-Host "--> Cleaning up"
-Remove-Item -Recurse -Force .\test
-
-Write-Host "==> Complete"
-
-Start-Sleep 1
-exit $rc
+Write-Host "==> FAILED"
+Write-Host "Hash 1: $h1"
+Write-Host "Hash 2: $h2"
+exit 1

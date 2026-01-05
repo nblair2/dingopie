@@ -1,0 +1,25 @@
+services:
+
+  outstation:
+    image: ghcr.io/nblair2/opendnp3-demo:latest
+    container_name: outstation
+    cap_add:
+      - NET_ADMIN
+    stdin_open: true
+    tty: true
+    volumes:
+      - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
+    command: ["/usr/local/bin/outstation-demo"]
+
+  master:
+    image: ghcr.io/nblair2/opendnp3-demo:latest
+    container_name: master
+    cap_add:
+      - NET_ADMIN
+    stdin_open: true
+    tty: true
+    volumes:
+      - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
+    command: ["/usr/local/bin/master-demo", "outstation", "20000"]
+    depends_on:
+      - outstation
