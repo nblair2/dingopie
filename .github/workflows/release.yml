@@ -36,7 +36,7 @@ jobs:
 
   goreleaser:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' || inputs.force_goreleaser == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || inputs.force_goreleaser == true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
