@@ -4,6 +4,7 @@ env:
   GO_VERSION: 1.24.4
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [ "**" ]
     paths:
@@ -11,8 +12,6 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/ci.yml'
-      - '.goreleaser.yml'
-      - 'Makefile'
 
 jobs:
   golangci-lint:
