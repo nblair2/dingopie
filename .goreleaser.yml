@@ -45,6 +45,8 @@ archives:
         formats: [zip]
     files:
       - none*
+    # https://goreleaser.com/errors/multiple-binaries-archive/
+    allow_different_binary_count: true
 
 release:
   draft: false
