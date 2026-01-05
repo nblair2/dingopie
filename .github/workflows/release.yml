@@ -5,6 +5,12 @@ env:
 
 on:
   workflow_dispatch:
+    inputs:
+      force_goreleaser:
+        description: 'Force run goreleaser'
+        type: boolean
+        required: false
+        default: false
   push:
     branches: [ "main" ]
 
@@ -30,7 +36,7 @@ jobs:
 
   goreleaser:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || inputs.force_goreleaser == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
