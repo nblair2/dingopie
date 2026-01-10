@@ -29,9 +29,6 @@ builds:
     gomips:
       - hardfloat
       - softfloat
-    go386:
-      - sse2
-      - softfloat
     ignore:
       # https://github.com/golang/go/issues/70705
       - goos: windows
@@ -45,8 +42,6 @@ archives:
         formats: [zip]
     files:
       - none*
-    # https://goreleaser.com/errors/multiple-binaries-archive/
-    allow_different_binary_count: true
 
 release:
   draft: false

@@ -107,7 +107,7 @@ test-windows-send-%:
 # Inject testing with docker containers
 docker-push:
 	@echo "=================================================================="
-	@IMAGE_TAG="${IMAGE_TAG:-latest}" bash test/scripts/build-container.bash "${IMAGE_TAG}"
+	@IMAGE_TAG="${IMAGE_TAG:-latest}" bash test/scripts/build-container.bash "${IMAGE_TAG}" --no-cache
 	@echo "=================================================================="
 
 docker-up:
