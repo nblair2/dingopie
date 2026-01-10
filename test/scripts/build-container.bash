@@ -10,5 +10,7 @@ if [ -f "$repo_root/.env" ]; then
 fi
 
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin || true
-docker build -t "${IMAGE}" -f test/docker/Dockerfile test/docker
+# Pass any additional arguments to docker build
+shift 1
+docker build "$@" -t "${IMAGE}" -f test/docker/Dockerfile test/docker
 docker push "${IMAGE}"

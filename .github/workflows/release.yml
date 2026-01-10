@@ -4,13 +4,6 @@ env:
   GO_VERSION: 1.24.4
 
 on:
-  workflow_dispatch:
-    inputs:
-      force_goreleaser:
-        description: 'Force run goreleaser'
-        type: boolean
-        required: false
-        default: false
   push:
     branches: [ "main" ]
 
@@ -20,6 +13,7 @@ permissions:
   issues: write
 
 jobs:
+
   release-please:
     runs-on: ubuntu-latest
     outputs:
@@ -36,7 +30,7 @@ jobs:
 
   goreleaser:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' || inputs.force_goreleaser == true }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
