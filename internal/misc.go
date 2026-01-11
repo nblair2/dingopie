@@ -31,6 +31,7 @@ func NewCipherStream(password string) cipher.Stream {
 // NewRandomBytes generates a slice of random bytes of the specified size.
 func NewRandomBytes(size int) []byte {
 	b := make([]byte, size)
+
 	rand.Read(b)
 
 	return b

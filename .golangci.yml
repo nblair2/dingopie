@@ -120,6 +120,12 @@ linters:
   exclusions:
     warn-unused: true
     rules:
+      # !TODO: Take this out before merging inject
+      - linters:
+          - revive
+          - errcheck
+        path: internal/inject/inject.go
+
       - linters:
           - godox
         text: Line contains TODO/BUG/FIXME

@@ -8,6 +8,7 @@ SCRIPTS_DIR        := test/scripts
 DIRECT_SEND_BASH   := $(SCRIPTS_DIR)/test-direct-send.bash
 DIRECT_SHELL_BASH  := $(SCRIPTS_DIR)/test-direct-shell.bash
 DIRECT_SEND_PS1    := $(SCRIPTS_DIR)/test-direct-send.ps1
+INJECT_SEND_BASH   := $(SCRIPTS_DIR)/test-inject-send.bash
 
 help:
 	@echo "Makefile commands:"
@@ -28,6 +29,7 @@ help:
 	@echo "  make test                 Run all tests on linux"
 	@echo "  make test-direct-send     Run direct send/receive tests on linux"
 	@echo "  make test-direct-shell    Run direct shell/connect tests on linux"
+	@echo "  make test-inject-send     Run inject send/receive tests on linux"
 	@echo "  make test-windows         Run Windows direct send/receive tests"
 	@echo
 	@echo "Docker (inject testing apparatus):"
@@ -43,7 +45,7 @@ setup:
 	go install github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
 	go install mvdan.cc/garble@$(GARBLE_VERSION)
 	pip install codespell==$(CODESPELL_VERSION)
-	sudo apt-get install lsof
+	sudo apt-get install -y lsof docker.io docker-compose-plugin
 
 fix:
 	codespell -I .codespellignore -w .
@@ -59,7 +61,7 @@ check: lint spell
 
 ##  ------------------------- Build  -------------------------------------
 
-clean:
+clean: docker-down
 	@rm -rf dist
 	@rm -rf test/results
 	@kill $$(lsof -t -i :20000) 2>/dev/null || true
@@ -81,12 +83,13 @@ release: $(GO_FILES)
 
 ## ------------------------- Test ----------------------------------------
 
-test: test-direct-send test-direct-shell
+test: test-direct test-inject # test-windows 
+
+test-direct: test-direct-send test-direct-shell
 
 test-direct-send: test-direct-send-primary test-direct-send-secondary
 
 test-direct-send-%:
-	@echo $(EXECUTABLE)
 	@echo "=================================================================="
 	@echo "Running $@"
 	@EXECUTABLE=$(EXECUTABLE) bash $(DIRECT_SEND_BASH) "$*"
@@ -100,6 +103,17 @@ test-direct-shell-%:
 	@EXECUTABLE=$(EXECUTABLE) bash $(DIRECT_SHELL_BASH) "$*"
 	@echo "=================================================================="
 
+test-inject: test-inject-send # test-inject-shell
+
+test-inject-send: test-inject-send-primary test-inject-send-secondary
+
+test-inject-send-%: docker-down
+	@echo "=================================================================="
+	@echo "Running $@"
+	@EXECUTABLE=$(EXECUTABLE) bash $(SCRIPTS_DIR)/test-inject-send.bash "$*"
+	@echo "=================================================================="
+
+# Windows cannot run shell and we can't do cross-runner tests
 test-windows: test-windows-send
 
 test-windows-send: test-windows-send-primary test-windows-send-secondary
@@ -110,18 +124,15 @@ test-windows-send-%:
 	@EXECUTABLE='$(EXECUTABLE)' powershell -File $(DIRECT_SEND_PS1) -TestType "$*"
 	@echo "=================================================================="
 
-# Windows cannot run shell and we can't do cross-runner tests
 
 # Inject testing with docker containers
-docker-push:
-	@echo "=================================================================="
-	@IMAGE_TAG="${IMAGE_TAG:-latest}" bash test/scripts/build-container.bash "${IMAGE_TAG}" --no-cache
-	@echo "=================================================================="
-
 docker-up:
-	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml up -d
+	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml up --detach
 
 docker-down:
 	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml down
+
+docker-logs:
+	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml logs --follow
 
 .PHONY: help setup hooks fix lint spell check clean build release test test-direct-send test-direct-shell test-windows test-windows-send docker-push docker-up docker-down

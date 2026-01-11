@@ -20,6 +20,17 @@ const (
 	groupRole   = "role"
 	groupMode   = "mode"
 	groupAction = "action"
+
+	titleRole   = "Roles:"
+	titleMode   = "Modes:"
+	titleAction = "Actions:"
+
+	useSend    = "send"
+	useRecv    = "receive"
+	useShell   = "shell"
+	useConnect = "connect"
+
+	runtimeWindows = "windows"
 )
 
 // ==================================================================
@@ -39,6 +50,10 @@ var (
 
 	// shell.
 	command string
+
+	// inject.
+	clientIP   string
+	clientPort int
 )
 
 // ==================================================================
@@ -173,7 +188,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddGroup(&cobra.Group{ID: groupRole, Title: "Roles:"})
+	rootCmd.AddGroup(&cobra.Group{ID: groupRole, Title: titleRole})
 	rootCmd.AddCommand(clientCmd, serverCmd)
 	rootCmd.PersistentFlags().
 		StringVarP(&key, "key", "k", "Setec Astronomy", "encryption key to garble data")
