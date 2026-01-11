@@ -32,6 +32,10 @@ var (
 
 	// shell.
 	command string
+
+	// inject.
+	clientIP   string
+	clientPort int
 )
 
 // ==================================================================

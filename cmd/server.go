@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/nblair2/dingopie/internal"
+	"github.com/nblair2/dingopie/internal/inject"
 	"github.com/nblair2/dingopie/internal/primary"
 	"github.com/nblair2/dingopie/internal/secondary"
 	"github.com/nblair2/dingopie/internal/shell"
@@ -122,16 +123,42 @@ var serverDirectConnectCmd = &cobra.Command{
 	},
 }
 
+var serverInjectCmd = &cobra.Command{
+	GroupID: "mode",
+	Use:     "inject <action>",
+	Short:   "inject into an existing DNP3 channel",
+	Long:    internal.Banner + `dingopie server inject runs on an existing DNP3 master, adding data to DNP3 responses and extracting data from DNP3 requests.`,
+}
+
+var serverInjectSendCmd = &cobra.Command{
+	GroupID: "action",
+	Use:     "send",
+	Short:   "send data to client",
+	Run: func(_ *cobra.Command, args []string) {
+		data, err := getData(file, args)
+		if err != nil {
+			fmt.Printf("Error getting data: %v\n", err)
+			os.Exit(1)
+		}
+
+		err = inject.ServerInjectSend(serverIP, clientIP, serverPort, clientPort, key, data)
+		if err != nil {
+			fmt.Printf("Error with inject send: %v\n", err)
+			os.Exit(1)
+		}
+	},
+}
+
 func init() {
 	serverCmd.AddGroup(&cobra.Group{ID: "mode", Title: "Modes:"})
 	serverCmd.AddCommand(serverDirectCmd)
+
 	serverDirectCmd.AddGroup(&cobra.Group{ID: "action", Title: "Actions:"})
 	serverDirectCmd.AddCommand(serverDirectSendCmd)
 	serverDirectCmd.AddCommand(serverDirectReceiveCmd)
 	serverDirectCmd.AddCommand(serverDirectShellCmd)
 	serverDirectCmd.AddCommand(serverDirectConnectCmd)
 	serverDirectCmd.AddCommand(serverDirectConnectCmd)
-
 	serverDirectSendCmd.PersistentFlags().
 		StringVarP(&file, "file", "f", "", "file to read data from (default is command line)")
 	serverDirectReceiveCmd.PersistentFlags().
@@ -143,4 +170,14 @@ func init() {
 			"variance of points to send in each message (e.g., 0.25 = ±25%)")
 	serverDirectShellCmd.PersistentFlags().
 		StringVarP(&command, "command", "c", os.Getenv("SHELL"), "command to run")
+
+	serverCmd.AddCommand(serverInjectCmd)
+	serverInjectCmd.AddGroup(&cobra.Group{ID: "action", Title: "Actions:"})
+	serverInjectCmd.PersistentFlags().
+		StringVarP(&clientIP, "client-ip", "j", "", "client IP address to filter on (default is all addresses)")
+	serverInjectCmd.PersistentFlags().
+		IntVarP(&clientPort, "client-port", "q", 0, "client port to filter on (default is all ports)")
+	serverInjectCmd.AddCommand(serverInjectSendCmd)
+	serverInjectSendCmd.PersistentFlags().
+		StringVarP(&file, "file", "f", "", "file to read data from (default is a positional argument)")
 }

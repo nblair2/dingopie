@@ -116,4 +116,7 @@ docker-up:
 docker-down:
 	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml down
 
+docker-logs:
+	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml logs --follow
+
 .PHONY: help setup hooks fix lint spell check clean build release test test-direct-send test-direct-shell test-windows test-windows-send docker-push docker-up docker-down

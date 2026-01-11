@@ -3,9 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
+	"github.com/nblair2/dingopie/internal/inject"
 	"github.com/nblair2/dingopie/internal/primary"
 	"github.com/nblair2/dingopie/internal/secondary"
 	"github.com/nblair2/dingopie/internal/shell"
@@ -17,13 +19,6 @@ var clientCmd = &cobra.Command{
 	Use:     "client <mode> <action>",
 	Short:   "run as DNP3 master",
 	Long:    internal.Banner + `dingopie client acts as a DNP3 master, using DNP3 Requests Frames.`,
-	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
-		if serverIP == "" {
-			fmt.Println("Error: server-ip is required")
-			os.Exit(1)
-		}
-		preRun(cmd)
-	},
 }
 
 var clientDirectCmd = &cobra.Command{
@@ -32,6 +27,14 @@ var clientDirectCmd = &cobra.Command{
 	Short:   "create a new DNP3 channel",
 	Long: internal.Banner + `dingopie client direct acts as a DNP3 master, initiating a connection
 to the server and sending DNP3 Request Frames.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if serverIP == "" {
+			fmt.Println("Error: server-ip is required")
+			os.Exit(1)
+		}
+
+		preRun(cmd)
+	},
 }
 
 var clientDirectSendCmd = &cobra.Command{
@@ -108,6 +111,17 @@ var clientDirectShellCmd = &cobra.Command{
 	GroupID: "action",
 	Use:     "shell",
 	Short:   "run a pty shell on this device",
+	PreRun: func(cmd *cobra.Command, args []string) {
+		if runtime.GOOS == "windows" {
+			fmt.Println("Error: shell is not supported on Windows")
+			os.Exit(1)
+		}
+		if serverIP == "" {
+			fmt.Println("Error: server-ip is required")
+			os.Exit(1)
+		}
+		preRun(cmd)
+	},
 	Run: func(_ *cobra.Command, _ []string) {
 		err := shell.ClientShell(serverIP, serverPort, key, command)
 		if err != nil {
@@ -131,15 +145,67 @@ var clientDirectConnectCmd = &cobra.Command{
 	},
 }
 
+var clientInjectCmd = &cobra.Command{
+	GroupID: "mode",
+	Use:     "inject <action>",
+	Short:   "inject into an existing DNP3 channel",
+	Long:    internal.Banner + `dingopie client inject runs on an existing DNP3 master, adding data to DNP3 requests and extracting data from DNP3 responses.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if runtime.GOOS == "windows" {
+			fmt.Println("Error: inject is not supported on Windows")
+			os.Exit(1)
+		}
+		preRun(cmd)
+	},
+}
+
+var clientInjectReceiveCmd = &cobra.Command{
+	GroupID: "action",
+	Use:     "receive",
+	Short:   "receive data from server",
+	Run: func(_ *cobra.Command, _ []string) {
+		var f *os.File
+		var err error
+		if file != "" {
+			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+			if err != nil {
+				fmt.Printf("Error opening file %s: %v\n", file, err)
+				os.Exit(1)
+			}
+			defer f.Close()
+		}
+
+		data, err := inject.ClientInjectReceive(clientIP, serverIP, clientPort, serverPort, key)
+		if err != nil {
+			fmt.Printf(
+				"Error with direct receive: %v\nAttempting to output what data we have\n",
+				err,
+			)
+		}
+
+		if file != "" {
+			_, err := f.Write(data)
+			if err != nil {
+				fmt.Printf("Error writing to file: %v\n", err)
+				fmt.Printf(">> Data received: %s\n", string(data))
+				os.Exit(1)
+			}
+			fmt.Printf(">> Data written to %s\n", file)
+		} else {
+			fmt.Printf(">> Message: %s\n", string(data))
+		}
+	},
+}
+
 func init() {
 	clientCmd.AddGroup(&cobra.Group{ID: "mode", Title: "Modes:"})
 	clientCmd.AddCommand(clientDirectCmd)
+
 	clientDirectCmd.AddGroup(&cobra.Group{ID: "action", Title: "Actions:"})
 	clientDirectCmd.AddCommand(clientDirectSendCmd)
 	clientDirectCmd.AddCommand(clientDirectReceiveCmd)
 	clientDirectCmd.AddCommand(clientDirectShellCmd)
 	clientDirectCmd.AddCommand(clientDirectConnectCmd)
-
 	clientDirectCmd.PersistentFlags().
 		DurationVarP(&wait, "wait", "w", 1*time.Second, "wait time between DNP3 requests")
 	clientDirectSendCmd.PersistentFlags().
@@ -153,4 +219,14 @@ func init() {
 			"variance of points to send in each message (e.g., 0.25 = ±25%)")
 	clientDirectShellCmd.PersistentFlags().
 		StringVarP(&command, "command", "c", os.Getenv("SHELL"), "command to run")
+
+	clientCmd.AddCommand(clientInjectCmd)
+	clientInjectCmd.AddGroup(&cobra.Group{ID: "action", Title: "Actions:"})
+	clientInjectCmd.PersistentFlags().
+		StringVarP(&clientIP, "client-ip", "j", "", "client IP address to filter on (default is all addresses)")
+	clientInjectCmd.PersistentFlags().
+		IntVarP(&clientPort, "client-port", "q", 0, "client port to filter on (default is all ports)")
+	clientInjectCmd.AddCommand(clientInjectReceiveCmd)
+	clientInjectReceiveCmd.PersistentFlags().
+		StringVarP(&file, "file", "f", "", "file to write data to (default is to stdout)")
 }

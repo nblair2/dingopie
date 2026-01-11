@@ -1,25 +1,29 @@
 services:
 
   outstation:
-    image: ghcr.io/nblair2/opendnp3-demo:latest
+    build:
+      dockerfile: Dockerfile
     container_name: outstation
+    volumes:
+      - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
     cap_add:
       - NET_ADMIN
     stdin_open: true
     tty: true
-    volumes:
-      - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
     command: ["/usr/local/bin/outstation-demo"]
+    stop_grace_period: 1s
 
   master:
-    image: ghcr.io/nblair2/opendnp3-demo:latest
+    build:
+      dockerfile: Dockerfile
     container_name: master
+    volumes:
+      - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
     cap_add:
       - NET_ADMIN
     stdin_open: true
     tty: true
-    volumes:
-      - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
-    command: ["/usr/local/bin/master-demo", "outstation", "20000"]
+    command: ["/usr/local/bin/master-demo", "outstation", "20000", "1"]
+    stop_grace_period: 1s
     depends_on:
       - outstation

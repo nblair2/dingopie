@@ -27,7 +27,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -59,10 +58,6 @@ var (
 
 // shell initiates an interactive shell session over the provided stream.
 func shell(command string, stream dnp3Stream, maxDataLen int) error {
-	if runtime.GOOS == "windows" {
-		return errors.New("shell is not supported on Windows")
-	}
-
 	var c *exec.Cmd
 
 	if strings.HasSuffix(command, "bash") {
