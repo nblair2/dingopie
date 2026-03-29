@@ -96,13 +96,15 @@ func shell(command string, stream dnp3Stream, maxDataLen int) error {
 
 // connect attaches to a shell using the provided stream.
 func connect(stream dnp3Stream, maxDataLen int) error {
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	//nolint:gosec // G115 - assume x32 OS takes care of this
+	fd := int(os.Stdin.Fd())
+	if term.IsTerminal(fd) {
+		oldState, err := term.MakeRaw(fd)
 		if err != nil {
 			return fmt.Errorf("error setting terminal to raw mode: %w", err)
 		}
 		//nolint:errcheck // best effort
-		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		defer term.Restore(fd, oldState)
 	}
 
 	done := make(chan error, 1)
