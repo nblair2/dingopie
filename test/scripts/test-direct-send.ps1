@@ -77,9 +77,34 @@ Write-RandomBase64File "results\key.txt" (Get-Random -Minimum 8   -Maximum 33)
 
 Write-Host "--> Starting server in background"
 $key = Get-Content -Raw results\key.txt
-$serverCmd = "$exe server direct $ServerArgs --key `"$key`" > `"results\server.log`" 2>&1"
-$serverProc = Start-Process cmd.exe -ArgumentList "/c", $serverCmd -PassThru
-Start-Sleep 1
+$serverArgParts = @("server", "direct") + (Split-Args $ServerArgs) + @("--key", $key)
+$serverProc = Start-Process $exe `
+    -ArgumentList $serverArgParts `
+    -RedirectStandardOutput "results\server.log" `
+    -RedirectStandardError "results\server.err" `
+    -NoNewWindow -PassThru
+
+# Wait for server to be ready (poll instead of fixed sleep)
+$maxWait = 10
+$waited = 0.0
+$serverReady = $false
+while ($waited -lt $maxWait) {
+    Start-Sleep -Milliseconds 250
+    $waited += 0.25
+    if ($serverProc.HasExited) {
+        Write-Host "==> FAILED (server process exited unexpectedly during startup)"
+        exit 1
+    }
+    if (Get-NetTCPConnection -LocalPort 20000 -State Listen -ErrorAction SilentlyContinue) {
+        $serverReady = $true
+        break
+    }
+}
+if (-not $serverReady) {
+    Write-Host "==> FAILED (server did not start listening within ${maxWait}s)"
+    Stop-Process -Id $serverProc.Id -Force -ErrorAction SilentlyContinue
+    exit 1
+}
 
 Write-Host "--> Starting client"
 $waitMs = Get-Random -Minimum 10 -Maximum 501
@@ -96,6 +121,7 @@ Start-Sleep 1
 
 if ($serverProc -and -not $serverProc.HasExited) {
     Stop-Process -Id $serverProc.Id -Force -ErrorAction SilentlyContinue
+    $serverProc.WaitForExit(3000) | Out-Null
     Write-Host "--> Server stopped by force (unexpected)"
 } else {
     Write-Host "--> Server already stopped on its own (expected)"
@@ -104,6 +130,9 @@ if ($serverProc -and -not $serverProc.HasExited) {
 Write-Host "--> Server log:`n"
 if (Test-Path "results\server.log") {
     Get-Content "results\server.log" -Raw
+}
+if (Test-Path "results\server.err") {
+    Get-Content "results\server.err" -Raw
 }
 
 Write-Host "`n--> Verifying outputs match"
