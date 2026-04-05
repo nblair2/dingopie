@@ -96,7 +96,7 @@ func shell(command string, stream dnp3Stream, maxDataLen int) error {
 
 // connect attaches to a shell using the provided stream.
 func connect(stream dnp3Stream, maxDataLen int) error {
-	//nolint:gosec // G115 - assume x32 OS takes care of this
+	//nolint:gosec // G115 - assume x32 OS takes care of this? TODO
 	fd := int(os.Stdin.Fd())
 	if term.IsTerminal(fd) {
 		oldState, err := term.MakeRaw(fd)

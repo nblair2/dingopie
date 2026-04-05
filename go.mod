@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/creack/pty v1.1.24
-	github.com/nblair2/go-dnp3 v1.0.2-0.20260403161744-7e5d12c7079b
+	github.com/nblair2/go-dnp3 v1.1.0
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
