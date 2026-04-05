@@ -62,8 +62,11 @@ var serverDirectReceiveCmd = &cobra.Command{
 	Use:     "receive",
 	Short:   "receive data from client",
 	Run: func(_ *cobra.Command, _ []string) {
-		var f *os.File
-		var err error
+		var (
+			f   *os.File
+			err error
+		)
+
 		if file != "" {
 			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
 			if err != nil {
@@ -88,6 +91,7 @@ var serverDirectReceiveCmd = &cobra.Command{
 				fmt.Printf(">> Attempting to output what data we have: %s\n", string(data))
 				os.Exit(1)
 			}
+
 			fmt.Printf(">> Data written to %s\n", file)
 		} else {
 			fmt.Printf(">> Message: %s\n", string(data))
@@ -118,6 +122,7 @@ var serverDirectConnectCmd = &cobra.Command{
 			fmt.Printf("Error connecting to shell: %v\n", err)
 			os.Exit(1)
 		}
+
 		fmt.Println(">> Connection closed")
 	},
 }

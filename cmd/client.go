@@ -22,6 +22,7 @@ var clientCmd = &cobra.Command{
 			fmt.Println("Error: server-ip is required")
 			os.Exit(1)
 		}
+
 		preRun(cmd)
 	},
 }
@@ -71,8 +72,11 @@ var clientDirectReceiveCmd = &cobra.Command{
 	Use:     "receive",
 	Short:   "receive data from server",
 	Run: func(_ *cobra.Command, _ []string) {
-		var f *os.File
-		var err error
+		var (
+			f   *os.File
+			err error
+		)
+
 		if file != "" {
 			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
 			if err != nil {
@@ -97,6 +101,7 @@ var clientDirectReceiveCmd = &cobra.Command{
 				fmt.Printf(">> Data received: %s\n", string(data))
 				os.Exit(1)
 			}
+
 			fmt.Printf(">> Data written to %s\n", file)
 		} else {
 			fmt.Printf(">> Message: %s\n", string(data))
@@ -127,6 +132,7 @@ var clientDirectConnectCmd = &cobra.Command{
 			fmt.Printf("Error with direct connect: %v\n", err)
 			os.Exit(1)
 		}
+
 		fmt.Println(">> Connection closed")
 	},
 }

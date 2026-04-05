@@ -361,6 +361,7 @@ func calculateStartEndIndices(data []byte, pointSize int) (byte, byte, error) {
 	start := rand.Intn(256 - size)
 	end := start + size - 1
 
+	//nolint:gosec // G115: clamped above
 	return byte(start), byte(end), nil
 }
 

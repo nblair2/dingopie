@@ -35,12 +35,13 @@ help:
 ## ------------------------- Develop -------------------------------------
 
 setup:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.7.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.10.1
 	sudo apt-get install lsof codespell
 	go install github.com/goreleaser/goreleaser/v2@latest
 	# docker, compose, etc
 
 fix:
+	codespell -I .codespellignore -w .
 	$$(go env GOPATH)/bin/golangci-lint run ./... --fix
 
 lint:
