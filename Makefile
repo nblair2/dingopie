@@ -9,6 +9,7 @@ DIRECT_SEND_BASH   := $(SCRIPTS_DIR)/test-direct-send.bash
 DIRECT_SHELL_BASH  := $(SCRIPTS_DIR)/test-direct-shell.bash
 DIRECT_SEND_PS1    := $(SCRIPTS_DIR)/test-direct-send.ps1
 INJECT_SEND_BASH   := $(SCRIPTS_DIR)/test-inject-send.bash
+DOCKER_COMPOSE     := docker compose -f test/docker/docker-compose.yml
 
 help:
 	@echo "Makefile commands:"
@@ -86,8 +87,7 @@ release: $(GO_FILES)
 
 ## ------------------------- Test ----------------------------------------
 
-test: test-unit test-direct test-inject # test-windows
-
+# Go unit tests
 test-unit:
 	@echo "=================================================================="
 	@echo "Running $@"
@@ -95,6 +95,9 @@ test-unit:
 	@go tool cover -func=coverage.out
 	@gocover-cobertura < coverage.out > coverage.xml
 	@echo "=================================================================="
+
+# E2E tests
+test: test-direct test-inject # test-windows
 
 test-direct: test-direct-send test-direct-shell
 
@@ -121,10 +124,10 @@ test-inject-send: test-inject-send-primary test-inject-send-secondary
 test-inject-send-%: docker-down
 	@echo "=================================================================="
 	@echo "Running $@"
-	@EXECUTABLE=$(EXECUTABLE) bash $(SCRIPTS_DIR)/test-inject-send.bash "$*"
+	@EXECUTABLE=$(EXECUTABLE) bash $(INJECT_SEND_BASH) "$*"
 	@echo "=================================================================="
 
-# Windows cannot run shell and we can't do cross-runner tests
+# Windows E2E tests
 test-windows: test-windows-send
 
 test-windows-send: test-windows-send-primary test-windows-send-secondary
@@ -135,15 +138,14 @@ test-windows-send-%:
 	@EXECUTABLE='$(EXECUTABLE)' powershell -File $(DIRECT_SEND_PS1) -TestType "$*"
 	@echo "=================================================================="
 
-
 # Inject testing with docker containers
 docker-up:
-	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml up --detach
+	@EXECUTABLE=$(EXECUTABLE) $(DOCKER_COMPOSE) up --detach
 
 docker-down:
-	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml down
+	@EXECUTABLE=$(EXECUTABLE) $(DOCKER_COMPOSE) down
 
 docker-logs:
-	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml logs --follow
+	@EXECUTABLE=$(EXECUTABLE) $(DOCKER_COMPOSE) logs --follow
 
 .PHONY: help setup hooks fix lint spell check clean build release test test-unit test-direct-send test-direct-shell test-windows test-windows-send docker-push docker-up docker-down
