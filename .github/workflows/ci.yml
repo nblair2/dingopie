@@ -1,11 +1,7 @@
 name: ci
 
-env:
-  GO_VERSION: 1.26.1
-
 on:
   pull_request:
-    branches: [ "**" ]
     paths:
       - '**.go'
       - 'go.mod'
@@ -18,20 +14,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Load tool versions
+        run: cat .github/versions.env >> "$GITHUB_ENV"
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.10.1
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
 
   codespell:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: codespell-project/actions-codespell@v2
-        with:
-          ignore_words_file: .codespellignore
+      - name: Load tool versions
+        run: cat .github/versions.env >> "$GITHUB_ENV"
+      - name: Install codespell
+        run: pip install --user "codespell==${{ env.CODESPELL_VERSION }}"
+      - name: Run codespell
+        run: codespell -I .codespellignore
 
   build:
     strategy:
@@ -49,13 +50,30 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Load tool versions
+        run: cat .github/versions.env >> "$GITHUB_ENV"
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - name: Install garble
+        run: go install mvdan.cc/garble@${{ env.GARBLE_VERSION }}
+      - name: Cache garble build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/garble
+          key: garble-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.GARBLE_VERSION }}-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            garble-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.GARBLE_VERSION }}-${{ env.GO_VERSION }}-
+      - name: Generate garble seed
+        run: |
+          SEED=$(openssl rand -base64 8 | tr -d '=')
+          echo "GARBLE_SEED=$SEED"
+          echo "GARBLE_SEED=$SEED" >> "$GITHUB_ENV"
       - name: Build via GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
+          version: ${{ env.GORELEASER_VERSION }}
           args: build --snapshot --clean --single-target
         env:
           GOOS: ${{ matrix.goos }}

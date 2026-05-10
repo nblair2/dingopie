@@ -13,7 +13,7 @@ import (
 )
 
 var clientCmd = &cobra.Command{
-	GroupID: "role",
+	GroupID: groupRole,
 	Use:     "client <mode> <action>",
 	Short:   "run as DNP3 master",
 	Long:    internal.Banner + `dingopie client acts as a DNP3 master, using DNP3 Requests Frames.`,
@@ -28,7 +28,7 @@ var clientCmd = &cobra.Command{
 }
 
 var clientDirectCmd = &cobra.Command{
-	GroupID: "mode",
+	GroupID: groupMode,
 	Use:     "direct <action>",
 	Short:   "create a new DNP3 channel",
 	Long: internal.Banner + `dingopie client direct acts as a DNP3 master, initiating a connection
@@ -36,7 +36,7 @@ to the server and sending DNP3 Request Frames.`,
 }
 
 var clientDirectSendCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "send",
 	Short:   "send data to server",
 	Run: func(_ *cobra.Command, args []string) {
@@ -68,7 +68,7 @@ var clientDirectSendCmd = &cobra.Command{
 }
 
 var clientDirectReceiveCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "receive",
 	Short:   "receive data from server",
 	Run: func(_ *cobra.Command, _ []string) {
@@ -110,7 +110,7 @@ var clientDirectReceiveCmd = &cobra.Command{
 }
 
 var clientDirectShellCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "shell",
 	Short:   "run a pty shell on this device",
 	Run: func(_ *cobra.Command, _ []string) {
@@ -123,7 +123,7 @@ var clientDirectShellCmd = &cobra.Command{
 }
 
 var clientDirectConnectCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "connect",
 	Short:   "connect to a pty shell running on server",
 	Run: func(_ *cobra.Command, _ []string) {
@@ -138,9 +138,9 @@ var clientDirectConnectCmd = &cobra.Command{
 }
 
 func init() {
-	clientCmd.AddGroup(&cobra.Group{ID: "mode", Title: "Modes:"})
+	clientCmd.AddGroup(&cobra.Group{ID: groupMode, Title: "Modes:"})
 	clientCmd.AddCommand(clientDirectCmd)
-	clientDirectCmd.AddGroup(&cobra.Group{ID: "action", Title: "Actions:"})
+	clientDirectCmd.AddGroup(&cobra.Group{ID: groupAction, Title: "Actions:"})
 	clientDirectCmd.AddCommand(clientDirectSendCmd)
 	clientDirectCmd.AddCommand(clientDirectReceiveCmd)
 	clientDirectCmd.AddCommand(clientDirectShellCmd)

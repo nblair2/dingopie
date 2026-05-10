@@ -31,7 +31,6 @@ func NewCipherStream(password string) cipher.Stream {
 // NewRandomBytes generates a slice of random bytes of the specified size.
 func NewRandomBytes(size int) []byte {
 	b := make([]byte, size)
-	//nolint:errcheck // Failure to create random bytes leads to null which is acceptable
 	rand.Read(b)
 
 	return b
