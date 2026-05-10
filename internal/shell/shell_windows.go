@@ -2,14 +2,17 @@
 
 package shell
 
-import "errors"
+import (
+	"errors"
+	"io"
+)
 
 var errUnsupported = errors.New("shell mode is not supported on Windows")
 
-func ClientShell(ip string, port int, key, command string) error {
+func ClientShell(_ io.Writer, ip string, port int, key, command string) error {
 	return errUnsupported
 }
 
-func ServerShell(ip string, port int, key, command string) error {
+func ServerShell(_ io.Writer, ip string, port int, key, command string) error {
 	return errUnsupported
 }

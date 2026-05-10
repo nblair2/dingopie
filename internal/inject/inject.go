@@ -61,6 +61,7 @@ type forwardInfo struct {
 }
 
 func newNFQueueToChan(ctx context.Context, que uint16, forward chan forwardInfo) error {
+	//nolint: exhaustruct // Use defaults
 	config := nfqueue.Config{
 		NfQueue:      que,
 		MaxPacketLen: 0xFFFF,

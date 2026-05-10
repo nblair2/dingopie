@@ -14,7 +14,7 @@ import (
 )
 
 // shell initiates an interactive shell session over the provided stream.
-func shell(command string, stream dnp3Stream, maxDataLen int) error {
+func shell(out io.Writer, command string, stream dnp3Stream, maxDataLen int) error {
 	var c *exec.Cmd
 
 	if strings.HasSuffix(command, "bash") {
@@ -41,35 +41,35 @@ func shell(command string, stream dnp3Stream, maxDataLen int) error {
 
 	_, _ = io.CopyBuffer(stream, ptmx, buf)
 
-	fmt.Printf(">> Shell session ended\n")
+	fmt.Fprintf(out, ">> Shell session ended\n")
 
 	return nil
 }
 
 // ClientShell - dingopie client direct shell.
-func ClientShell(ip string, port int, key, command string) error {
+func ClientShell(out io.Writer, ip string, port int, key, command string) error {
 	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
 	}
 	defer conn.Close()
 
-	fmt.Printf(">> Connected to %s:%d\n", ip, port)
+	fmt.Fprintf(out, ">> Connected to %s:%d\n", ip, port)
 
 	stream := newClientStream(key, conn)
 
-	return shell(command, stream, clientMaxDataLen)
+	return shell(out, command, stream, clientMaxDataLen)
 }
 
 // ServerShell - dingopie server direct shell.
-func ServerShell(ip string, port int, key, command string) error {
+func ServerShell(out io.Writer, ip string, port int, key, command string) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return fmt.Errorf("error starting TCP listener: %w", err)
 	}
 	defer ln.Close()
 
-	fmt.Printf(">> Listening on %s:%d\n", ip, port)
+	fmt.Fprintf(out, ">> Listening on %s:%d\n", ip, port)
 
 	conn, err := ln.Accept()
 	if err != nil {
@@ -77,8 +77,8 @@ func ServerShell(ip string, port int, key, command string) error {
 	}
 	defer conn.Close()
 
-	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
+	fmt.Fprintf(out, "\tConnection %s\n", conn.RemoteAddr().String())
 	stream := newServerStream(key, conn)
 
-	return shell(command, stream, serverMaxDataLen)
+	return shell(out, command, stream, serverMaxDataLen)
 }

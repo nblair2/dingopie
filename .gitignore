@@ -2,4 +2,6 @@
 .vscode/
 .env
 dist/
+coverage.out
+coverage.xml
 test/results/

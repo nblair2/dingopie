@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 
@@ -37,6 +38,10 @@ func NewRandomBytes(size int) []byte {
 	return b
 }
 
+// fullVarianceMultiplier is the lower bound on the upper-range expansion
+// when variance >= 1 (at least 2× the requested point count).
+const fullVarianceMultiplier = 2
+
 // GetPointVarianceRange calculates the low and high range of points based on the given variance.
 func GetPointVarianceRange(points int, variance float32, maxPoints int) (int, int) {
 	var pointsLow, pointsHigh int
@@ -45,7 +50,7 @@ func GetPointVarianceRange(points int, variance float32, maxPoints int) (int, in
 	case variance <= 0:
 		return points, points
 	case variance >= 1:
-		return points, max(2*points, maxPoints)
+		return points, max(fullVarianceMultiplier*points, maxPoints)
 	}
 
 	pointsLow = int(float32(points) * (1 - variance))
@@ -192,8 +197,9 @@ func RemovePeriodicBytes(source []byte, insertLen, offset, period int) ([]byte, 
 // ==================================================================.
 
 // NewProgressBar returns a progress bar with standardized options.
-func NewProgressBar(size int, message string) *progressbar.ProgressBar {
+func NewProgressBar(out io.Writer, size int, message string) *progressbar.ProgressBar {
 	return progressbar.NewOptions(size,
+		progressbar.OptionSetWriter(out),
 		progressbar.OptionSetDescription(message),
 		progressbar.OptionSetTheme(progressbar.ThemeASCII),
 		progressbar.OptionShowCount(),
@@ -201,7 +207,7 @@ func NewProgressBar(size int, message string) *progressbar.ProgressBar {
 		progressbar.OptionSetItsString("bytes"),
 		progressbar.OptionSetPredictTime(true),
 		progressbar.OptionShowElapsedTimeOnFinish(),
-		progressbar.OptionOnCompletion(func() { fmt.Println() }),
+		progressbar.OptionOnCompletion(func() { fmt.Fprintln(out) }),
 	)
 }
 

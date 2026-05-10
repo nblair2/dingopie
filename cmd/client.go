@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"time"
 
@@ -20,7 +19,7 @@ var clientCmd = &cobra.Command{
 	Long:    internal.Banner + `dingopie client acts as a DNP3 master, using DNP3 Requests Frames.`,
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		if serverIP == "" {
-			fmt.Println("Error: server-ip is required")
+			cmd.Println("Error: server-ip is required")
 			os.Exit(1)
 		}
 
@@ -36,7 +35,7 @@ var clientDirectCmd = &cobra.Command{
 to the server and sending DNP3 Request Frames.`,
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		if serverIP == "" {
-			fmt.Println("Error: server-ip is required")
+			cmd.Println("Error: server-ip is required")
 			os.Exit(1)
 		}
 
@@ -48,28 +47,37 @@ var clientDirectSendCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useSend,
 	Short:   "send data to server",
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		if 0 >= points || points > 48 {
-			fmt.Println("Error: points cannot be less than 0 or greater than 48")
+			cmd.Println("Error: points cannot be less than 0 or greater than 48")
 
 			return
 		}
 
 		if -1 > pointVariance || pointVariance > 1 {
-			fmt.Println("Error: point-variance must be between -1 and 1")
+			cmd.Println("Error: point-variance must be between -1 and 1")
 
 			return
 		}
 
-		data, err := getData(file, args)
+		data, err := getData(cmd, file, args)
 		if err != nil {
-			fmt.Printf("Error getting data: %v\n", err)
+			cmd.Printf("Error getting data: %v\n", err)
 			os.Exit(1)
 		}
 
-		err = primary.ClientSend(serverIP, serverPort, key, data, points, pointVariance, wait)
+		err = primary.ClientSend(
+			cmd.OutOrStdout(),
+			serverIP,
+			serverPort,
+			key,
+			data,
+			points,
+			pointVariance,
+			wait,
+		)
 		if err != nil {
-			fmt.Printf(
+			cmd.Printf(
 				"Error with direct send: %v", err)
 			os.Exit(1)
 		}
@@ -80,24 +88,24 @@ var clientDirectReceiveCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useRecv,
 	Short:   "receive data from server",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		var (
 			f   *os.File
 			err error
 		)
 
 		if file != "" {
-			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode)
 			if err != nil {
-				fmt.Printf("Error opening file %s: %v\n", file, err)
+				cmd.Printf("Error opening file %s: %v\n", file, err)
 				os.Exit(1)
 			}
 			defer f.Close()
 		}
 
-		data, err := secondary.ClientReceive(serverIP, serverPort, key, wait)
+		data, err := secondary.ClientReceive(cmd.OutOrStdout(), serverIP, serverPort, key, wait)
 		if err != nil {
-			fmt.Printf(
+			cmd.Printf(
 				"Error with direct receive: %v\nAttempting to output what data we have\n",
 				err,
 			)
@@ -106,14 +114,14 @@ var clientDirectReceiveCmd = &cobra.Command{
 		if file != "" {
 			_, err := f.Write(data)
 			if err != nil {
-				fmt.Printf("Error writing to file: %v\n", err)
-				fmt.Printf(">> Data received: %s\n", string(data))
+				cmd.Printf("Error writing to file: %v\n", err)
+				cmd.Printf(">> Data received: %s\n", string(data))
 				os.Exit(1)
 			}
 
-			fmt.Printf(">> Data written to %s\n", file)
+			cmd.Printf(">> Data written to %s\n", file)
 		} else {
-			fmt.Printf(">> Message: %s\n", string(data))
+			cmd.Printf(">> Message: %s\n", string(data))
 		}
 	},
 }
@@ -124,16 +132,16 @@ var clientDirectShellCmd = &cobra.Command{
 	Short:   "run a pty shell on this device",
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if serverIP == "" {
-			fmt.Println("Error: server-ip is required")
+			cmd.Println("Error: server-ip is required")
 			os.Exit(1)
 		}
 
 		preRun(cmd)
 	},
-	Run: func(_ *cobra.Command, _ []string) {
-		err := shell.ClientShell(serverIP, serverPort, key, command)
+	Run: func(cmd *cobra.Command, _ []string) {
+		err := shell.ClientShell(cmd.OutOrStdout(), serverIP, serverPort, key, command)
 		if err != nil {
-			fmt.Printf("Error with direct shell: %v\n", err)
+			cmd.Printf("Error with direct shell: %v\n", err)
 			os.Exit(1)
 		}
 	},
@@ -143,14 +151,14 @@ var clientDirectConnectCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useConnect,
 	Short:   "connect to a pty shell running on server",
-	Run: func(_ *cobra.Command, _ []string) {
-		err := shell.ClientConnect(serverIP, serverPort, key)
+	Run: func(cmd *cobra.Command, _ []string) {
+		err := shell.ClientConnect(cmd.OutOrStdout(), serverIP, serverPort, key)
 		if err != nil {
-			fmt.Printf("Error with direct connect: %v\n", err)
+			cmd.Printf("Error with direct connect: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Println(">> Connection closed")
+		cmd.Println(">> Connection closed")
 	},
 }
 
@@ -163,20 +171,21 @@ var clientInjectCmd = &cobra.Command{
 		`DNP3 responses.`,
 }
 
+//nolint:dupl // temporary mock during building
 var clientInjectReceiveCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useRecv,
 	Short:   "receive data from server",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		var (
 			f   *os.File
 			err error
 		)
 
 		if file != "" {
-			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode)
 			if err != nil {
-				fmt.Printf("Error opening file %s: %v\n", file, err)
+				cmd.Printf("Error opening file %s: %v\n", file, err)
 				os.Exit(1)
 			}
 			defer f.Close()
@@ -184,7 +193,7 @@ var clientInjectReceiveCmd = &cobra.Command{
 
 		data, err := inject.ClientInjectReceive(clientIP, serverIP, clientPort, serverPort, key)
 		if err != nil {
-			fmt.Printf(
+			cmd.Printf(
 				"Error with inject receive: %v\nAttempting to output what data we have\n",
 				err,
 			)
@@ -193,14 +202,14 @@ var clientInjectReceiveCmd = &cobra.Command{
 		if file != "" {
 			_, err := f.Write(data)
 			if err != nil {
-				fmt.Printf("Error writing to file: %v\n", err)
-				fmt.Printf(">> Data received: %s\n", string(data))
+				cmd.Printf("Error writing to file: %v\n", err)
+				cmd.Printf(">> Data received: %s\n", string(data))
 				os.Exit(1)
 			}
 
-			fmt.Printf(">> Data written to %s\n", file)
+			cmd.Printf(">> Data written to %s\n", file)
 		} else {
-			fmt.Printf(">> Message: %s\n", string(data))
+			cmd.Printf(">> Message: %s\n", string(data))
 		}
 	},
 }
@@ -209,16 +218,16 @@ var clientInjectSendCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useSend,
 	Short:   "send data to server",
-	Run: func(_ *cobra.Command, args []string) {
-		data, err := getData(file, args)
+	Run: func(cmd *cobra.Command, args []string) {
+		data, err := getData(cmd, file, args)
 		if err != nil {
-			fmt.Printf("Error getting data: %v\n", err)
+			cmd.Printf("Error getting data: %v\n", err)
 			os.Exit(1)
 		}
 
 		err = inject.ClientInjectSend(clientIP, serverIP, clientPort, serverPort, key, data)
 		if err != nil {
-			fmt.Printf("Error with inject send: %v\n", err)
+			cmd.Printf("Error with inject send: %v\n", err)
 			os.Exit(1)
 		}
 	},
@@ -240,9 +249,9 @@ func init() {
 	clientDirectReceiveCmd.PersistentFlags().
 		StringVarP(&file, "file", "f", "", "file to write data to (default is to stdout)")
 	clientDirectSendCmd.PersistentFlags().
-		IntVarP(&points, "points", "o", 8, "number of 4-byte points to send in each message (max 48)")
+		IntVarP(&points, "points", "o", defaultPoints, "number of 4-byte points to send in each message (max 48)")
 	clientDirectSendCmd.PersistentFlags().
-		Float32VarP(&pointVariance, "point-variance", "r", 0.25,
+		Float32VarP(&pointVariance, "point-variance", "r", defaultPointVariance,
 			"variance of points to send in each message (e.g., 0.25 = ±25%)")
 	clientDirectShellCmd.PersistentFlags().
 		StringVarP(&command, "command", "c", os.Getenv("SHELL"), "command to run")

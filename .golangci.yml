@@ -16,29 +16,27 @@ linters:
     - copyloopvar
     - cyclop
     - decorder
-    # - depguard
     - dogsled
     - dupl
     - dupword
     - durationcheck
     - embeddedstructfieldcheck
-    # - err113
     - errcheck
     - errchkjson
     - errname
     - errorlint
     - exhaustive
-    # - exhaustruct
+    - exhaustruct
     - exptostd
     - fatcontext
-    # - forbidigo
+    - forbidigo
     - forcetypeassert
     - funcorder
     - funlen
     - ginkgolinter
     - gocheckcompilerdirectives
     # - gochecknoglobals
-    # - gochecknoinits
+    - gochecknoinits
     - gochecksumtype
     - gocognit
     - goconst
@@ -69,7 +67,7 @@ linters:
     - makezero
     - mirror
     - misspell
-    # - mnd
+    - mnd
     - modernize
     - musttag
     - nakedret
@@ -124,11 +122,40 @@ linters:
       - linters:
           - revive
           - errcheck
+          - forbidigo
+          - mnd
         path: internal/inject/inject.go
 
+      # DNP3 constants
+      - linters:
+          - mnd
+        path: internal/dnp3.go
+
+      # Test files: idiomatic table-driven tests need looser rules
+      - linters:
+          - mnd
+          - exhaustruct
+          - funlen
+          - gocognit
+          - cyclop
+          - dupl
+          - lll
+          - maintidx
+        path: _test\.go
+
+      # Do not discourage useful comments
       - linters:
           - godox
         text: Line contains TODO/BUG/FIXME
+
+      # Cobra-isms
+      - linters:
+          - exhaustruct
+          - gochecknoglobals
+          - gochecknoinits
+        path: cmd/*
+
+      # Specific unhandled errors
       - linters:
           - gosec
         text: "G104: Errors unhandled"
@@ -138,15 +165,14 @@ linters:
       - linters:
           - errcheck
         text: \.Close
+      - linters:
+          - errcheck
+        text: fmt\.Fprint
 
   disable:
     - depguard
     - err113
-    - exhaustruct
-    - forbidigo
     - gochecknoglobals
-    - gochecknoinits
-    - mnd
     - noctx
     - varnamelen
 

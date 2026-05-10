@@ -140,6 +140,7 @@ var pointSizeMap = map[string]int{
 	string(DNP3G41V3Q0):    5,
 }
 
+//nolint:exhaustruct // Use defaults, many fields set later
 func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 	frame := dnp3.Frame{
 		DataLink: dnp3.DataLink{
@@ -182,7 +183,8 @@ func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 				//nolint:gosec // G404: not cryptographically relevant, G115: clamped
 				Sequence: uint8(rand.Intn(15)),
 			},
-			FunctionCode:        dnp3.Response,
+			FunctionCode: dnp3.Response,
+			//nolint:exhaustruct // use all unset IIN
 			InternalIndications: dnp3.ApplicationInternalIndications{},
 		}
 	}
@@ -208,9 +210,7 @@ func NewDNP3ResponseFrame() dnp3.Frame {
 func GetObjectDataFromDNP3Bytes(inData []byte) ([][]byte, [][]byte, error) {
 	var headers, data [][]byte
 
-	frame := dnp3.Frame{}
-
-	err := frame.FromBytes(inData)
+	frame, err := dnp3.NewFrameFromBytes(inData)
 	if err != nil {
 		return headers, data, fmt.Errorf("error parsing DNP3 frame from bytes: %w", err)
 	}
@@ -322,6 +322,7 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 		}
 	}
 
+	//nolint:exhaustruct // Need a constructor here in upstream
 	appData := dnp3.ApplicationData{}
 
 	err := appData.FromBytes(result)

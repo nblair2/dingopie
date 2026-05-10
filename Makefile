@@ -27,6 +27,7 @@ help:
 	@echo
 	@echo "Tests:"
 	@echo "  make test                 Run all tests on linux"
+	@echo "  make test-unit            Run Go unit tests"
 	@echo "  make test-direct-send     Run direct send/receive tests on linux"
 	@echo "  make test-direct-shell    Run direct shell/connect tests on linux"
 	@echo "  make test-inject-send     Run inject send/receive tests on linux"
@@ -44,6 +45,7 @@ setup:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
 	go install github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
 	go install mvdan.cc/garble@$(GARBLE_VERSION)
+	go install github.com/boumenot/gocover-cobertura@$(GOCOVERCOBERTURA_VERSION)
 	pip install codespell==$(CODESPELL_VERSION)
 	sudo apt-get install -y lsof docker.io docker-compose-plugin
 
@@ -62,8 +64,9 @@ check: lint spell
 ##  ------------------------- Build  -------------------------------------
 
 clean: docker-down
-	@rm -rf dist
+	@rm -rf dist/
 	@rm -rf test/results
+	@rm -rf coverage.out coverage.xml
 	@kill $$(lsof -t -i :20000) 2>/dev/null || true
 
 # Build binaries for current platform using goreleaser (fast)
@@ -83,7 +86,15 @@ release: $(GO_FILES)
 
 ## ------------------------- Test ----------------------------------------
 
-test: test-direct test-inject # test-windows 
+test: test-unit test-direct test-inject # test-windows
+
+test-unit:
+	@echo "=================================================================="
+	@echo "Running $@"
+	@go test -v -race -coverpkg=./... -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out
+	@gocover-cobertura < coverage.out > coverage.xml
+	@echo "=================================================================="
 
 test-direct: test-direct-send test-direct-shell
 
@@ -135,4 +146,4 @@ docker-down:
 docker-logs:
 	@EXECUTABLE=$(EXECUTABLE) docker compose -f test/docker/docker-compose.yml logs --follow
 
-.PHONY: help setup hooks fix lint spell check clean build release test test-direct-send test-direct-shell test-windows test-windows-send docker-push docker-up docker-down
+.PHONY: help setup hooks fix lint spell check clean build release test test-unit test-direct-send test-direct-shell test-windows test-windows-send docker-push docker-up docker-down

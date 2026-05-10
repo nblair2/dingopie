@@ -31,6 +31,14 @@ const (
 	useConnect = "connect"
 )
 
+// Flag defaults.
+const (
+	defaultServerPort    = 20000
+	defaultPoints        = 8
+	defaultPointVariance = 0.25
+	receiveFileMode      = 0o400
+)
+
 // ==================================================================
 // Flag Vars
 // ==================================================================
@@ -58,7 +66,7 @@ var (
 // Helper Functions
 // ==================================================================
 
-func getData(file string, args []string) ([]byte, error) {
+func getData(cmd *cobra.Command, file string, args []string) ([]byte, error) {
 	if file != "" {
 		//nolint: gosec // G304 opening file provided by user
 		b, err := os.ReadFile(file)
@@ -84,7 +92,7 @@ func getData(file string, args []string) ([]byte, error) {
 			return nil, errors.New("no data provided to send (stdin empty)")
 		}
 
-		fmt.Printf(">> Message read from stdin\n")
+		cmd.Printf(">> Message read from stdin\n")
 
 		return b, nil
 	}
@@ -92,7 +100,7 @@ func getData(file string, args []string) ([]byte, error) {
 	if len(args) == 1 {
 		data := []byte(args[0])
 
-		fmt.Printf(">> Message read from command line\n")
+		cmd.Printf(">> Message read from command line\n")
 
 		return data, nil
 	} else if len(args) > 1 {
@@ -109,7 +117,7 @@ func getData(file string, args []string) ([]byte, error) {
 var mustDisplayFlag = []string{"server-port", "points", "point-variance", "wait", "command"}
 
 func printCommand(cmd *cobra.Command) {
-	fmt.Println(
+	cmd.Println(
 		strings.ReplaceAll(
 			fmt.Sprintf("============= %s =============", cmd.CommandPath()),
 			" ",
@@ -119,13 +127,13 @@ func printCommand(cmd *cobra.Command) {
 }
 
 func dumpFlags(cmd *cobra.Command) {
-	fmt.Println(">> Flags:")
+	cmd.Println(">> Flags:")
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		if !f.Changed && !slices.Contains(mustDisplayFlag, f.Name) {
 			return
 		}
 
-		fmt.Printf("\t% 14s:\t%s\n", f.Name, f.Value)
+		cmd.Printf("\t% 14s:\t%s\n", f.Name, f.Value)
 	})
 }
 
@@ -135,7 +143,7 @@ func preRun(cmd *cobra.Command) {
 }
 
 func postRun(cmd *cobra.Command) {
-	fmt.Printf(">> KTHXBI\n")
+	cmd.Printf(">> KTHXBI\n")
 	printCommand(cmd)
 }
 
@@ -178,9 +186,10 @@ an interactive shell ('shell' | 'connect').
 
 // Execute - dingopie.
 func Execute() {
+	rootCmd.SetOut(os.Stdout)
+
 	err := rootCmd.Execute()
 	if err != nil {
-		fmt.Printf("Error executing dingopie: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -191,7 +200,8 @@ func init() {
 	rootCmd.PersistentFlags().
 		StringVarP(&key, "key", "k", "Setec Astronomy", "encryption key to garble data")
 	rootCmd.PersistentFlags().StringVarP(&serverIP, "server-ip", "i", "", "server IP address")
-	rootCmd.PersistentFlags().IntVarP(&serverPort, "server-port", "p", 20000, "server port")
+	rootCmd.PersistentFlags().
+		IntVarP(&serverPort, "server-port", "p", defaultServerPort, "server port")
 	// A custom usage template is the least of all evils that I have found to allow the unique structure
 	// of requiring role, mode, and action in the command line, while still providing clear help messages.
 	//nolint: lll // template
