@@ -22,3 +22,20 @@ func ServerInjectSend(
 ) error {
 	return errUnsupported
 }
+
+func ClientInjectSend(
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+	data []byte,
+) error {
+	return errUnsupported
+}
+
+func ServerInjectReceive(
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+) ([]byte, error) {
+	return nil, errUnsupported
+}

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
@@ -124,11 +123,6 @@ var clientDirectShellCmd = &cobra.Command{
 	Use:     useShell,
 	Short:   "run a pty shell on this device",
 	PreRun: func(cmd *cobra.Command, _ []string) {
-		if runtime.GOOS == runtimeWindows {
-			fmt.Println("Error: shell is not supported on Windows")
-			os.Exit(1)
-		}
-
 		if serverIP == "" {
 			fmt.Println("Error: server-ip is required")
 			os.Exit(1)
@@ -167,14 +161,6 @@ var clientInjectCmd = &cobra.Command{
 	Long: internal.Banner +
 		`dingopie client inject runs on an existing DNP3 master, adding data to DNP3 requests and extracting data from` +
 		`DNP3 responses.`,
-	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
-		if runtime.GOOS == runtimeWindows {
-			fmt.Println("Error: inject is not supported on Windows")
-			os.Exit(1)
-		}
-
-		preRun(cmd)
-	},
 }
 
 var clientInjectReceiveCmd = &cobra.Command{
@@ -199,7 +185,7 @@ var clientInjectReceiveCmd = &cobra.Command{
 		data, err := inject.ClientInjectReceive(clientIP, serverIP, clientPort, serverPort, key)
 		if err != nil {
 			fmt.Printf(
-				"Error with direct receive: %v\nAttempting to output what data we have\n",
+				"Error with inject receive: %v\nAttempting to output what data we have\n",
 				err,
 			)
 		}
@@ -215,6 +201,25 @@ var clientInjectReceiveCmd = &cobra.Command{
 			fmt.Printf(">> Data written to %s\n", file)
 		} else {
 			fmt.Printf(">> Message: %s\n", string(data))
+		}
+	},
+}
+
+var clientInjectSendCmd = &cobra.Command{
+	GroupID: groupAction,
+	Use:     useSend,
+	Short:   "send data to server",
+	Run: func(_ *cobra.Command, args []string) {
+		data, err := getData(file, args)
+		if err != nil {
+			fmt.Printf("Error getting data: %v\n", err)
+			os.Exit(1)
+		}
+
+		err = inject.ClientInjectSend(clientIP, serverIP, clientPort, serverPort, key, data)
+		if err != nil {
+			fmt.Printf("Error with inject send: %v\n", err)
+			os.Exit(1)
 		}
 	},
 }
@@ -251,4 +256,7 @@ func init() {
 	clientInjectCmd.AddCommand(clientInjectReceiveCmd)
 	clientInjectReceiveCmd.PersistentFlags().
 		StringVarP(&file, "file", "f", "", "file to write data to (default is to stdout)")
+	clientInjectCmd.AddCommand(clientInjectSendCmd)
+	clientInjectSendCmd.PersistentFlags().
+		StringVarP(&file, "file", "f", "", "file to read data from (default is a positional argument)")
 }

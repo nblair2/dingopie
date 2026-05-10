@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/nblair2/dingopie/internal"
 	"github.com/nblair2/dingopie/internal/inject"
@@ -136,14 +135,6 @@ var serverInjectCmd = &cobra.Command{
 	Long: internal.Banner +
 		`dingopie server inject runs on an existing DNP3 master, adding data to DNP3 responses and extracting data from` +
 		` DNP3 requests.`,
-	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
-		if runtime.GOOS == runtimeWindows {
-			fmt.Println("Error: inject is not supported on Windows")
-			os.Exit(1)
-		}
-
-		preRun(cmd)
-	},
 }
 
 var serverInjectSendCmd = &cobra.Command{
@@ -161,6 +152,48 @@ var serverInjectSendCmd = &cobra.Command{
 		if err != nil {
 			fmt.Printf("Error with inject send: %v\n", err)
 			os.Exit(1)
+		}
+	},
+}
+
+var serverInjectReceiveCmd = &cobra.Command{
+	GroupID: groupAction,
+	Use:     useRecv,
+	Short:   "receive data from client",
+	Run: func(_ *cobra.Command, _ []string) {
+		var (
+			f   *os.File
+			err error
+		)
+
+		if file != "" {
+			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+			if err != nil {
+				fmt.Printf("Error opening file %s: %v\n", file, err)
+				os.Exit(1)
+			}
+			defer f.Close()
+		}
+
+		data, err := inject.ServerInjectReceive(serverIP, clientIP, serverPort, clientPort, key)
+		if err != nil {
+			fmt.Printf(
+				"Error with inject receive: %v\nAttempting to output what data we have\n",
+				err,
+			)
+		}
+
+		if file != "" {
+			_, err := f.Write(data)
+			if err != nil {
+				fmt.Printf("Error writing to file: %v\n", err)
+				fmt.Printf(">> Data received: %s\n", string(data))
+				os.Exit(1)
+			}
+
+			fmt.Printf(">> Data written to %s\n", file)
+		} else {
+			fmt.Printf(">> Message: %s\n", string(data))
 		}
 	},
 }
@@ -196,4 +229,7 @@ func init() {
 	serverInjectCmd.AddCommand(serverInjectSendCmd)
 	serverInjectSendCmd.PersistentFlags().
 		StringVarP(&file, "file", "f", "", "file to read data from (default is a positional argument)")
+	serverInjectCmd.AddCommand(serverInjectReceiveCmd)
+	serverInjectReceiveCmd.PersistentFlags().
+		StringVarP(&file, "file", "f", "", "file to write data to (default is to stdout)")
 }

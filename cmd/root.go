@@ -29,8 +29,6 @@ const (
 	useRecv    = "receive"
 	useShell   = "shell"
 	useConnect = "connect"
-
-	runtimeWindows = "windows"
 )
 
 // ==================================================================

@@ -281,6 +281,27 @@ func ServerInjectSend(
 	return nil
 }
 
+func ClientInjectSend(
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+	data []byte,
+) error {
+	inject(localAddr, remoteAddr, localPort, remotePort, blindAcceptFunc, blindAcceptFunc)
+
+	return nil
+}
+
+func ServerInjectReceive(
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+) ([]byte, error) {
+	inject(localAddr, remoteAddr, localPort, remotePort, blindAcceptFunc, blindAcceptFunc)
+
+	return nil, nil
+}
+
 func blindAcceptFunc(fwd forwardInfo) error {
 	fmt.Printf("Got packet: % X\n", fwd.payload)
 
