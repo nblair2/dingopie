@@ -12,14 +12,14 @@ import (
 )
 
 var serverCmd = &cobra.Command{
-	GroupID: "role",
+	GroupID: groupRole,
 	Use:     "server <mode> <action>",
 	Short:   "run as DNP3 outstation",
 	Long:    internal.Banner + `dingopie server acts as a DNP3 outstation, using DNP3 Response Frames.`,
 }
 
 var serverDirectCmd = &cobra.Command{
-	GroupID: "mode",
+	GroupID: groupMode,
 	Use:     "direct <action>",
 	Short:   "create a new DNP3 channel",
 	Long: internal.Banner + `dingopie server direct acts as a DNP3 outstation, accepting connections
@@ -27,7 +27,7 @@ from the client and sending DNP3 Response Frames.`,
 }
 
 var serverDirectSendCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "send",
 	Short:   "send data to client",
 	Run: func(_ *cobra.Command, args []string) {
@@ -58,7 +58,7 @@ var serverDirectSendCmd = &cobra.Command{
 }
 
 var serverDirectReceiveCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "receive",
 	Short:   "receive data from client",
 	Run: func(_ *cobra.Command, _ []string) {
@@ -100,7 +100,7 @@ var serverDirectReceiveCmd = &cobra.Command{
 }
 
 var serverDirectShellCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "shell",
 	Short:   "run a pty shell on this device",
 	Run: func(_ *cobra.Command, _ []string) {
@@ -113,7 +113,7 @@ var serverDirectShellCmd = &cobra.Command{
 }
 
 var serverDirectConnectCmd = &cobra.Command{
-	GroupID: "action",
+	GroupID: groupAction,
 	Use:     "connect",
 	Short:   "connect to a pty shell running on client",
 	Run: func(_ *cobra.Command, _ []string) {
@@ -128,9 +128,9 @@ var serverDirectConnectCmd = &cobra.Command{
 }
 
 func init() {
-	serverCmd.AddGroup(&cobra.Group{ID: "mode", Title: "Modes:"})
+	serverCmd.AddGroup(&cobra.Group{ID: groupMode, Title: "Modes:"})
 	serverCmd.AddCommand(serverDirectCmd)
-	serverDirectCmd.AddGroup(&cobra.Group{ID: "action", Title: "Actions:"})
+	serverDirectCmd.AddGroup(&cobra.Group{ID: groupAction, Title: "Actions:"})
 	serverDirectCmd.AddCommand(serverDirectSendCmd)
 	serverDirectCmd.AddCommand(serverDirectReceiveCmd)
 	serverDirectCmd.AddCommand(serverDirectShellCmd)

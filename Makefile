@@ -1,5 +1,9 @@
+include .github/versions.env
+
 GO_FILES            = $(shell find . -name '*.go')
 EXECUTABLE         ?= "$(shell pwd)/$(shell find dist/ -path "*$(shell go env GOOS)*$(shell go env GOARCH)*" -type f -name dingopie | head -n 1)"
+GARBLE_SEED        ?= $(shell openssl rand -base64 8 | tr -d '=')
+export GARBLE_SEED
 SCRIPTS_DIR        := test/scripts
 DIRECT_SEND_BASH   := $(SCRIPTS_DIR)/test-direct-send.bash
 DIRECT_SHELL_BASH  := $(SCRIPTS_DIR)/test-direct-shell.bash
@@ -35,10 +39,11 @@ help:
 ## ------------------------- Develop -------------------------------------
 
 setup:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.10.1
-	sudo apt-get install lsof codespell
-	go install github.com/goreleaser/goreleaser/v2@latest
-	# docker, compose, etc
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
+	go install github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
+	go install mvdan.cc/garble@$(GARBLE_VERSION)
+	pip install codespell==$(CODESPELL_VERSION)
+	sudo apt-get install lsof
 
 fix:
 	codespell -I .codespellignore -w .
@@ -62,12 +67,14 @@ clean:
 # Build binaries for current platform using goreleaser (fast)
 build: $(GO_FILES)
 	@echo "=================================================================="
+	@echo "GARBLE_SEED=$(GARBLE_SEED)"
 	@CGO_ENABLED=0 goreleaser build --snapshot --single-target --clean
 	@echo "=================================================================="
 
 # Build binaries for all platforms using goreleaser
 release: $(GO_FILES)
 	@echo "=================================================================="
+	@echo "GARBLE_SEED=$(GARBLE_SEED)"
 	@goreleaser build --snapshot --clean
 	@echo "=================================================================="
 

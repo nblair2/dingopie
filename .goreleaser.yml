@@ -1,13 +1,16 @@
-# test this file with `make release`
 version: 2
 
 builds:
   - env:
       - CGO_ENABLED=0
+    tool: garble
+    command: "-literals"
+    flags:
+      - -seed={{ envOrDefault "GARBLE_SEED" "random" }}
+      - build
+      - -trimpath
     ldflags:
       - -s -w
-    flags:
-      - -trimpath
     goos:
       - linux
       - windows
@@ -47,6 +50,32 @@ release:
   draft: false
   prerelease: false
   make_latest: true
+  footer: |
+    ---
+    Garble Seed: `{{ .Env.GARBLE_SEED }}`
 
 changelog:
-  disable: true
+  groups:
+    - title: Breaking Changes
+      regexp: '^.*!:'
+      order: 0
+    - title: Documentation
+      regexp: '^doc'
+      order: 1
+    - title: Features
+      regexp: '^feat'
+      order: 2
+    - title: Bug Fixes
+      regexp: '^fix'
+      order: 3
+    - title: Performance Improvements
+      regexp: '^perf'
+      order: 4
+    - title: Refactoring
+      regexp: '^refac'
+      order: 5
+    - title: Testing, Builds, CI
+      regexp: '^(test|build|ci)'
+      order: 6
+    - title: Other Changes
+      order: 999

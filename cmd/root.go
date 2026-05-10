@@ -15,6 +15,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// Cobra command group IDs.
+const (
+	groupRole   = "role"
+	groupMode   = "mode"
+	groupAction = "action"
+)
+
 // ==================================================================
 // Flag Vars
 // ==================================================================
@@ -166,7 +173,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddGroup(&cobra.Group{ID: "role", Title: "Roles:"})
+	rootCmd.AddGroup(&cobra.Group{ID: groupRole, Title: "Roles:"})
 	rootCmd.AddCommand(clientCmd, serverCmd)
 	rootCmd.PersistentFlags().
 		StringVarP(&key, "key", "k", "Setec Astronomy", "encryption key to garble data")
