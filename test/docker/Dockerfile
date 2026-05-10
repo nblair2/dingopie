@@ -1,4 +1,4 @@
-FROM ghcr.io/nblair2/opendnp3/demo
+FROM ghcr.io/nblair2/dnp3-container:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 

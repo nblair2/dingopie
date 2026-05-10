@@ -9,9 +9,7 @@ services:
       - ../results:/usr/local/bin/results:rw
     cap_add:
       - NET_ADMIN
-    stdin_open: true
-    tty: true
-    command: ["/usr/local/bin/outstation-demo"]
+    command: ["outstation-demo", "20000", "5"]
     stop_grace_period: 1s
     networks:
       test:
@@ -26,9 +24,7 @@ services:
       - ../results:/usr/local/bin/results:rw
     cap_add:
       - NET_ADMIN
-    stdin_open: true
-    tty: true
-    command: ["/usr/local/bin/master-demo", "outstation", "20000", "1"]
+    command: ["master-demo", "outstation", "20000", "1"]
     stop_grace_period: 1s
     depends_on:
       - outstation
