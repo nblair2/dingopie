@@ -1,8 +1,7 @@
 services:
 
   outstation:
-    build:
-      dockerfile: Dockerfile
+    image: dingopie-test:latest
     container_name: outstation
     volumes:
       - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
@@ -17,8 +16,7 @@ services:
         ipv4_address: 192.168.0.10
 
   master:
-    build:
-      dockerfile: Dockerfile
+    image: dingopie-test:latest
     container_name: master
     volumes:
       - ${EXECUTABLE}:/usr/local/bin/dingopie:ro

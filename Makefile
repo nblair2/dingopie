@@ -10,6 +10,8 @@ DIRECT_SHELL_BASH  := $(SCRIPTS_DIR)/test-direct-shell.bash
 DIRECT_SEND_PS1    := $(SCRIPTS_DIR)/test-direct-send.ps1
 INJECT_SEND_BASH   := $(SCRIPTS_DIR)/test-inject-send.bash
 DOCKER_COMPOSE     := docker compose -f test/docker/docker-compose.yml
+DOCKER_TEST_IMAGE  := dingopie-test:latest
+DOCKER_TEST_DIR    := test/docker
 
 help:
 	@echo "Makefile commands:"
@@ -35,7 +37,8 @@ help:
 	@echo "  make test-windows         Run Windows direct send/receive tests"
 	@echo
 	@echo "Docker (inject testing apparatus):"
-	@echo "  make docker-push          Build and push test docker image"
+	@echo "  make docker-build         Build test docker image (no-op if present)"
+	@echo "  make docker-rebuild       Force rebuild test docker image"
 	@echo "  make docker-up            Start test docker containers"
 	@echo "  make docker-down          Stop test docker containers"
 	@echo
@@ -117,11 +120,11 @@ test-direct-shell-%:
 	@EXECUTABLE=$(EXECUTABLE) bash $(DIRECT_SHELL_BASH) "$*"
 	@echo "=================================================================="
 
-test-inject: test-inject-send # test-inject-shell
+test-inject: docker-build test-inject-send # test-inject-shell
 
 test-inject-send: test-inject-send-primary test-inject-send-secondary
 
-test-inject-send-%: docker-down
+test-inject-send-%: docker-build docker-down
 	@echo "=================================================================="
 	@echo "Running $@"
 	@EXECUTABLE=$(EXECUTABLE) bash $(INJECT_SEND_BASH) "$*"
@@ -139,7 +142,15 @@ test-windows-send-%:
 	@echo "=================================================================="
 
 # Inject testing with docker containers
-docker-up:
+docker-build:
+	@docker image inspect $(DOCKER_TEST_IMAGE) >/dev/null 2>&1 || \
+	  docker build -t $(DOCKER_TEST_IMAGE) $(DOCKER_TEST_DIR)
+
+docker-rebuild:
+	docker rmi -f $(DOCKER_TEST_IMAGE) 2>/dev/null || true
+	docker build -t $(DOCKER_TEST_IMAGE) $(DOCKER_TEST_DIR)
+
+docker-up: docker-build
 	@EXECUTABLE=$(EXECUTABLE) $(DOCKER_COMPOSE) up --detach
 
 docker-down:
@@ -148,4 +159,4 @@ docker-down:
 docker-logs:
 	@EXECUTABLE=$(EXECUTABLE) $(DOCKER_COMPOSE) logs --follow
 
-.PHONY: help setup hooks fix lint spell check clean build release test test-unit test-direct-send test-direct-shell test-windows test-windows-send docker-push docker-up docker-down
+.PHONY: help setup hooks fix lint spell check clean build release test test-unit test-direct-send test-direct-shell test-windows test-windows-send docker-build docker-rebuild docker-up docker-down docker-logs

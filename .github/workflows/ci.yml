@@ -119,6 +119,18 @@ jobs:
         with:
           name: dist-linux-${{ matrix.goarch }}
           path: dist/
+      - name: Set up Docker Buildx
+        if: matrix.test == 'inject'
+        uses: docker/setup-buildx-action@v3
+      - name: Build test docker image
+        if: matrix.test == 'inject'
+        uses: docker/build-push-action@v6
+        with:
+          context: test/docker
+          tags: dingopie-test:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
       - name: Run tests
         shell: bash
         run: |
