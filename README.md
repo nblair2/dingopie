@@ -1,5 +1,9 @@
 # dingopie :wolf: :cake:
 
+![Release](https://img.shields.io/github/v/release/nblair2/dingopie?style=flat-square)
+![Go Version](https://img.shields.io/github/go-mod/go-version/nblair2/dingopie?filename=go.mod&style=flat-square)
+![License](https://img.shields.io/github/license/nblair2/dingopie?style=flat-square)
+
 > a DNP3 covert channel
 
 ![dingopie](.media/dingopie.png)
