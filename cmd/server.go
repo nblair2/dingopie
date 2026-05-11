@@ -155,7 +155,9 @@ var serverInjectSendCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = inject.ServerInjectSend(serverIP, clientIP, serverPort, clientPort, key, data)
+		err = inject.ServerInjectSend(
+			cmd.OutOrStdout(), serverIP, clientIP, serverPort, clientPort, key, data,
+		)
 		if err != nil {
 			cmd.Printf("Error with inject send: %v\n", err)
 			os.Exit(1)
@@ -183,7 +185,9 @@ var serverInjectReceiveCmd = &cobra.Command{
 			defer f.Close()
 		}
 
-		data, err := inject.ServerInjectReceive(serverIP, clientIP, serverPort, clientPort, key)
+		data, err := inject.ServerInjectReceive(
+			cmd.OutOrStdout(), serverIP, clientIP, serverPort, clientPort, key,
+		)
 		if err != nil {
 			cmd.Printf(
 				"Error with inject receive: %v\nAttempting to output what data we have\n",

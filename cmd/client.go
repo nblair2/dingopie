@@ -169,6 +169,9 @@ var clientInjectCmd = &cobra.Command{
 	Long: internal.Banner +
 		`dingopie client inject runs on an existing DNP3 master, adding data to DNP3 requests and extracting data from` +
 		`DNP3 responses.`,
+	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+		preRun(cmd)
+	},
 }
 
 //nolint:dupl // temporary mock during building
@@ -191,7 +194,9 @@ var clientInjectReceiveCmd = &cobra.Command{
 			defer f.Close()
 		}
 
-		data, err := inject.ClientInjectReceive(clientIP, serverIP, clientPort, serverPort, key)
+		data, err := inject.ClientInjectReceive(
+			cmd.OutOrStdout(), clientIP, serverIP, clientPort, serverPort, key,
+		)
 		if err != nil {
 			cmd.Printf(
 				"Error with inject receive: %v\nAttempting to output what data we have\n",
@@ -225,7 +230,9 @@ var clientInjectSendCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = inject.ClientInjectSend(clientIP, serverIP, clientPort, serverPort, key, data)
+		err = inject.ClientInjectSend(
+			cmd.OutOrStdout(), clientIP, serverIP, clientPort, serverPort, key, data,
+		)
 		if err != nil {
 			cmd.Printf("Error with inject send: %v\n", err)
 			os.Exit(1)

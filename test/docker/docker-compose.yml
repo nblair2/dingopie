@@ -35,6 +35,8 @@ services:
 networks:
   test:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: dingopie-test
     ipam:
       config:
         - subnet: 192.168.0.0/24

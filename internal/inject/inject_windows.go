@@ -2,11 +2,15 @@
 
 package inject
 
-import "errors"
+import (
+	"errors"
+	"io"
+)
 
 var errUnsupported = errors.New("inject mode is not supported on Windows")
 
 func ClientInjectReceive(
+	_ io.Writer,
 	localAddr, remoteAddr string,
 	localPort, remotePort int,
 	key string,
@@ -15,6 +19,7 @@ func ClientInjectReceive(
 }
 
 func ServerInjectSend(
+	_ io.Writer,
 	localAddr, remoteAddr string,
 	localPort, remotePort int,
 	key string,
@@ -24,6 +29,7 @@ func ServerInjectSend(
 }
 
 func ClientInjectSend(
+	_ io.Writer,
 	localAddr, remoteAddr string,
 	localPort, remotePort int,
 	key string,
@@ -33,6 +39,7 @@ func ClientInjectSend(
 }
 
 func ServerInjectReceive(
+	_ io.Writer,
 	localAddr, remoteAddr string,
 	localPort, remotePort int,
 	key string,

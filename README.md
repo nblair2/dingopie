@@ -153,4 +153,25 @@ Title: Shell
 
 > Example [inject.pcapng.gz](.media/inject.pcapng.gz)
 
-In inject mode, dingopie is subordinate to the existing legitimate DNP3 channel. The rate and structure of the traffic will remain that of the legitimate channel, but the size of each packet will increase. Data is added to the end of DNP3 packets as they leave one host, and removed on the other side before allowing the packets to continue on to the legitimate DNP3 program. To mark the start of the data, dingopie constructs a DNP3 object that is non-protocol-conforming in 3 respects: the first bit of the qualifier octet is set (should be 0), the object prefix code is 7 (reserved), and the range specifier code is A (reserved). All data following an object with these characteristics, up to the end of the frame is a part of the covert channel. A packet with less data than could have been packed into the frame, or a packet with no data signals the end of the message.
+In inject mode, dingopie is subordinate to the existing legitimate DNP3 channel. The rate and structure of the traffic will remain that of the legitimate channel, but the size of each packet will increase. Data is added to the end of DNP3 packets as they leave one host, and removed on the other side before allowing the packets to continue on to the legitimate DNP3 program. To mark the start of the data, dingopie constructs a DNP3 object that is non-protocol-conforming: Group 0, Variation 0, Qualifier `0xFX`, where `X` represents one of three reserved Range Specifier Codes `A`, `C`, or `D`. All data following an object with these characteristics, up to the end of the frame is a part of the covert channel. The sender and receiver can either intercept packets as they leave a device (i.e. running on anoutstation or master), or they can run on network infrastructure that carries DNP3 traffic. In the second case, dingopie inject can even multiplex its data transfer over many DNP3 connections to increase the throughput. Although in this instance, TCP out-of-order issues may impact reliability.
+
+```mermaid
+sequenceDiagram
+Title: Inject
+    participant o as outstation
+    participant s as server
+    participant c as client
+    participant m as master
+
+    o -->>s: Legitimate Traffic
+    s->>c: SendSize (G0V0QFA)
+    c-->>m: Legitimate Traffic
+    Loop send data
+        o-->>s: Legitimate Traffic
+        s->>c:  SendData (G0V0QFC)
+        c-->>m: Legitimate Traffic
+    end
+    o -->>s: Legitimate Traffic
+    s->>c:   Disconnect (G0V0QFD)
+    c-->>m:  Legitimate Traffic
+```
