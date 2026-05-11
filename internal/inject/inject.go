@@ -534,6 +534,34 @@ func trySendSizePacket(fwd *forwardInfo, encSize []byte) (bool, error) {
 	return true, nil
 }
 
+// trySendEndPacket attempts to inject the end marker into fwd. Returns true if injected,
+// false if the packet has no room or is not DNP3.
+func trySendEndPacket(fwd *forwardInfo) (bool, error) {
+	ipHdrLen, tcpHdrLen, err := findDNP3InIPPacket(fwd.payload)
+	if err != nil {
+		return false, nil //nolint:nilerr // non-DNP3 packets pass through silently
+	}
+
+	dnp3Start := ipHdrLen + tcpHdrLen
+	if len(fwd.payload) < dnp3Start+dnp3HeaderLen {
+		return false, nil
+	}
+
+	available := maxDNP3Length - int(fwd.payload[dnp3Start+2])
+	if available <= markerLen {
+		return false, nil // not enough room, wait for next packet
+	}
+
+	newPkt, _, err := injectIntoPacket(fwd.payload, nil, endMarker)
+	if err != nil {
+		return false, fmt.Errorf("injectIntoPacket (end): %w", err)
+	}
+
+	fwd.payload = newPkt
+
+	return true, nil
+}
+
 //nolint:funlen // multi-phase send state machine: size → data chunks → end marker
 func newSendFunc(
 	out io.Writer,
@@ -596,13 +624,16 @@ func newSendFunc(
 			return nil
 		}
 
-		// All data sent — inject end marker and terminate.
-		newPkt, _, err := injectIntoPacket(fwd.payload, nil, endMarker)
+		// All data sent — inject end marker on the next DNP3 packet with room.
+		sent, err := trySendEndPacket(fwd)
 		if err != nil {
-			return fmt.Errorf("injectIntoPacket (end): %w", err)
+			return err
 		}
 
-		fwd.payload = newPkt
+		if !sent {
+			return nil // wait for next packet
+		}
+
 		isDone = true
 
 		bar.Finish()

@@ -9,7 +9,8 @@ services:
       - ../results:/usr/local/bin/results:rw
     cap_add:
       - NET_ADMIN
-    command: ["outstation-demo", "20000", "5"]
+    init: true
+    command: ["outstation-demo", "20000", "1"]
     stop_grace_period: 1s
     networks:
       test:
@@ -24,7 +25,8 @@ services:
       - ../results:/usr/local/bin/results:rw
     cap_add:
       - NET_ADMIN
-    command: ["master-demo", "outstation", "20000", "1"]
+    init: true
+    command: ["master-demo", "outstation", "20000", "0.2"]
     stop_grace_period: 1s
     depends_on:
       - outstation
