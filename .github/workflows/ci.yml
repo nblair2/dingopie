@@ -10,6 +10,17 @@ on:
 
 jobs:
 
+  codespell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Load tool versions
+        run: cat .github/versions.env >> "$GITHUB_ENV"
+      - name: Install codespell
+        run: pip install --user "codespell==${{ env.CODESPELL_VERSION }}"
+      - name: Run codespell
+        run: codespell -I .codespellignore
+
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
@@ -37,17 +48,6 @@ jobs:
         run: go install github.com/boumenot/gocover-cobertura@${{ env.GOCOVERCOBERTURA_VERSION }}
       - name: Run unit tests
         run: make test-unit
-
-  codespell:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Load tool versions
-        run: cat .github/versions.env >> "$GITHUB_ENV"
-      - name: Install codespell
-        run: pip install --user "codespell==${{ env.CODESPELL_VERSION }}"
-      - name: Run codespell
-        run: codespell -I .codespellignore
 
   build:
     strategy:
@@ -104,7 +104,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [direct-send, direct-shell, inject]
+        test:
+          - test-direct-send-primary
+          - test-direct-send-secondary
+          - test-direct-shell-primary
+          - test-direct-shell-secondary
+          - test-inject-send-primary
+          - test-inject-send-secondary
         goarch: [amd64, arm64]
         include:
           - goarch: amd64
@@ -141,11 +147,17 @@ jobs:
           fi
           echo "dingopie binary found at: $EXECUTABLE"
           chmod +x $EXECUTABLE
-          make test-${{ matrix.test }} EXECUTABLE=$EXECUTABLE
+          make ${{ matrix.test }} EXECUTABLE=$EXECUTABLE
 
   test-windows:
     runs-on: windows-latest
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - test-windows-direct-send-primary
+          - test-windows-direct-send-secondary
     steps:
       - uses: actions/checkout@v6
       - name: Download artifacts
@@ -158,5 +170,5 @@ jobs:
           $exe = (Resolve-Path .\dist\dingopie_windows_amd64_v1\dingopie.exe).Path
           $exe = $exe -replace '\\', '/'
           echo "dingopie binary found at: $exe"
-          make test-windows EXECUTABLE="$exe"
+          make ${{ matrix.test }} EXECUTABLE="$exe"
         shell: pwsh

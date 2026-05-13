@@ -90,6 +90,8 @@ release: $(GO_FILES)
 
 ## ------------------------- Test ----------------------------------------
 
+test: test-unit test-direct test-inject
+
 # Go unit tests
 test-unit:
 	@echo "=================================================================="
@@ -99,9 +101,7 @@ test-unit:
 	@gocover-cobertura < coverage.out > coverage.xml
 	@echo "=================================================================="
 
-# E2E tests
-test: test-direct test-inject # test-windows
-
+# Linux E2E tests
 test-direct: test-direct-send test-direct-shell
 
 test-direct-send: test-direct-send-primary test-direct-send-secondary
@@ -120,7 +120,7 @@ test-direct-shell-%:
 	@EXECUTABLE=$(EXECUTABLE) bash $(DIRECT_SHELL_BASH) "$*"
 	@echo "=================================================================="
 
-test-inject: docker-build test-inject-send # test-inject-shell
+test-inject: docker-build test-inject-send
 
 test-inject-send: test-inject-send-primary test-inject-send-secondary
 
@@ -131,11 +131,11 @@ test-inject-send-%: docker-build docker-down
 	@echo "=================================================================="
 
 # Windows E2E tests
-test-windows: test-windows-send
+test-windows: test-windows-direct-send
 
-test-windows-send: test-windows-send-primary test-windows-send-secondary
+test-windows-direct-send: test-windows-direct-send-primary test-windows-direct-send-secondary
 
-test-windows-send-%:
+test-windows-direct-send-%:
 	@echo "=================================================================="
 	@echo "Running $@"
 	@EXECUTABLE='$(EXECUTABLE)' powershell -File $(DIRECT_SEND_PS1) -TestType "$*"
