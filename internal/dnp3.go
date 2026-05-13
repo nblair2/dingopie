@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"slices"
 
+	"github.com/google/gopacket"
 	"github.com/nblair2/go-dnp3/dnp3"
 )
 
@@ -219,7 +220,7 @@ func GetObjectDataFromDNP3Bytes(inData []byte) ([][]byte, [][]byte, error) {
 
 ObjectsLoop:
 	for _, obj := range app.Objects {
-		objData, err := obj.ToBytes()
+		objData, err := obj.SerializeTo()
 		if err != nil {
 			return headers, data, fmt.Errorf("error converting DNP3 object to bytes: %w", err)
 		}
@@ -322,23 +323,22 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 		}
 	}
 
-	//nolint:exhaustruct // Need a constructor here in upstream
-	appData := dnp3.ApplicationData{}
+	appData := dnp3.NewApplicationData()
 
-	err := appData.FromBytes(result)
+	err := appData.DecodeFromBytes(result)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing application data from bytes: %w", err)
 	}
 
 	incrementDNP3Sequence(frame)
-	frame.Application.SetData(appData)
+	frame.Application.SetData(*appData)
 
-	b, err := frame.ToBytes()
-	if err != nil {
+	buf := gopacket.NewSerializeBuffer()
+	if err := frame.SerializeTo(buf, gopacket.SerializeOptions{}); err != nil {
 		return nil, fmt.Errorf("error converting DNP3 frame to bytes: %w", err)
 	}
 
-	return b, nil
+	return buf.Bytes(), nil
 }
 
 func calculateStartEndIndices(data []byte, pointSize int) (byte, byte, error) {

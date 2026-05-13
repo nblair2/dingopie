@@ -27,6 +27,7 @@ package inject
 import (
 	"bytes"
 	"context"
+	"crypto/cipher"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -40,8 +41,10 @@ import (
 
 	"github.com/coreos/go-iptables/iptables"
 	nfqueue "github.com/florianl/go-nfqueue"
+	"github.com/google/gopacket"
 	"github.com/nblair2/dingopie/internal"
 	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/schollz/progressbar/v3"
 )
 
 const (
@@ -59,6 +62,15 @@ var (
 	injectMarker = []byte{0x00, 0x00, 0xFC}
 	endMarker    = []byte{0x00, 0x00, 0xFD}
 )
+
+// ==================================================================
+// COMMON
+// ==================================================================
+
+type forwardInfo struct {
+	payload      []byte
+	responseChan chan []byte
+}
 
 func inject(
 	out io.Writer,
@@ -91,11 +103,6 @@ func inject(
 	}
 
 	return nil
-}
-
-type forwardInfo struct {
-	payload      []byte
-	responseChan chan []byte
 }
 
 func newNFQueueToChan(que uint16, forward chan forwardInfo) {
@@ -155,6 +162,253 @@ func newChanToFunc(forward chan forwardInfo, fwdFunc func(*forwardInfo) error) {
 		fwd.responseChan <- fwd.payload
 	}
 }
+
+// ==================================================================
+// SEND
+// ==================================================================
+
+type sendState struct {
+	encSize   []byte
+	remaining []byte
+	sizeSent  bool
+	isDone    bool
+	bar       *progressbar.ProgressBar
+	out       io.Writer
+	done      chan struct{}
+}
+
+func newSendState(out io.Writer, data []byte, key string, done chan struct{}) (*sendState, error) {
+	if uint64(len(data)) > math.MaxUint32 {
+		return nil, fmt.Errorf(
+			"data length %d exceeds maximum of %d bytes", len(data), uint32(math.MaxUint32),
+		)
+	}
+
+	//nolint:gosec // G115: len guarded by math.MaxUint32 check above
+	originalLen := uint32(len(data))
+
+	stream := internal.NewCipherStream(key)
+
+	encSize := make([]byte, sizePayloadLen)
+	binary.BigEndian.PutUint32(encSize, originalLen)
+	stream.XORKeyStream(encSize, encSize)
+
+	enc := make([]byte, len(data))
+	stream.XORKeyStream(enc, data)
+
+	bar := internal.NewProgressBar(out, int(originalLen), "\tSending:\t")
+
+	return &sendState{
+		encSize:   encSize,
+		remaining: enc,
+		sizeSent:  false,
+		isDone:    false,
+		bar:       bar,
+		out:       out,
+		done:      done,
+	}, nil
+}
+
+func (s *sendState) process(fwd *forwardInfo) error {
+	if s.isDone {
+		return nil
+	}
+
+	if !s.sizeSent {
+		sent, err := trySendSizePacket(fwd, s.encSize)
+		if err != nil {
+			return err
+		}
+
+		s.sizeSent = sent
+
+		return nil
+	}
+
+	if len(s.remaining) > 0 {
+		newPkt, consumed, err := injectIntoPacket(fwd.payload, s.remaining, injectMarker)
+		if err != nil {
+			return fmt.Errorf("injectIntoPacket (data): %w", err)
+		}
+
+		if consumed > 0 {
+			fwd.payload = newPkt
+			s.remaining = s.remaining[consumed:]
+			s.bar.Add(consumed)
+		}
+
+		return nil
+	}
+
+	// All data sent — inject end marker on the next DNP3 packet with room.
+	sent, err := trySendEndPacket(fwd)
+	if err != nil {
+		return err
+	}
+
+	if !sent {
+		return nil
+	}
+
+	s.isDone = true
+
+	s.bar.Finish()
+	fmt.Fprintf(s.out, ">> All data sent, removing firewall rule\n")
+	close(s.done)
+
+	return nil
+}
+
+// ==================================================================
+// RECEIVE
+// ==================================================================
+
+type recvState struct {
+	stream      cipher.Stream
+	gotSize     bool
+	originalLen uint32
+	collected   []byte
+	bar         *progressbar.ProgressBar
+	out         io.Writer
+	done        chan struct{}
+	result      *[]byte
+}
+
+func newRecvState(out io.Writer, key string, result *[]byte, done chan struct{}) *recvState {
+	return &recvState{
+		stream: internal.NewCipherStream(key),
+		out:    out,
+		done:   done,
+		result: result,
+	}
+}
+
+func (r *recvState) process(fwd *forwardInfo) error {
+	kind, payload, cleaned, err := extractFromPacket(fwd.payload)
+	if err != nil {
+		return fmt.Errorf("extractFromPacket: %w", err)
+	}
+
+	fwd.payload = cleaned
+
+	switch kind { //nolint:exhaustive // markerNone is a no-op pass-through
+	case markerSize:
+		if len(payload) < sizePayloadLen {
+			return fmt.Errorf("size marker payload too short: %d bytes", len(payload))
+		}
+
+		dec := make([]byte, sizePayloadLen)
+		r.stream.XORKeyStream(dec, payload[:sizePayloadLen])
+		r.originalLen = binary.BigEndian.Uint32(dec)
+		r.gotSize = true
+		r.bar = internal.NewProgressBar(r.out, int(r.originalLen), "\tReceiving:\t")
+
+	case markerData:
+		dec := make([]byte, len(payload))
+		r.stream.XORKeyStream(dec, payload)
+		r.collected = append(r.collected, dec...)
+
+		if r.bar != nil {
+			r.bar.Add(len(dec))
+		}
+
+	case markerEnd:
+		received := r.collected
+		//nolint:gosec // G115: len bounded by originalLen (uint32)
+		if r.gotSize && uint32(len(received)) > r.originalLen {
+			received = received[:r.originalLen]
+		}
+
+		*r.result = received
+
+		if r.bar != nil {
+			r.bar.Finish()
+		}
+
+		fmt.Fprintf(r.out, ">> Data receive complete, removing firewall rule\n")
+		close(r.done)
+	}
+
+	return nil
+}
+
+// ==================================================================
+// Exported functions
+// ==================================================================
+
+func ClientInjectReceive(
+	out io.Writer,
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+) ([]byte, error) {
+	var received []byte
+
+	done := make(chan struct{})
+	rule := newRecvRule(localAddr, remoteAddr, localPort, remotePort)
+	recv := newRecvState(out, key, &received, done)
+	err := inject(out, rule, recv.process, done)
+
+	return received, err
+}
+
+func ServerInjectSend(
+	out io.Writer,
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+	data []byte,
+) error {
+	done := make(chan struct{})
+
+	send, err := newSendState(out, data, key, done)
+	if err != nil {
+		return err
+	}
+
+	rule := newSendRule(localAddr, remoteAddr, localPort, remotePort)
+
+	return inject(out, rule, send.process, done)
+}
+
+func ClientInjectSend(
+	out io.Writer,
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+	data []byte,
+) error {
+	done := make(chan struct{})
+
+	send, err := newSendState(out, data, key, done)
+	if err != nil {
+		return err
+	}
+
+	rule := newSendRule(localAddr, remoteAddr, localPort, remotePort)
+
+	return inject(out, rule, send.process, done)
+}
+
+func ServerInjectReceive(
+	out io.Writer,
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+	key string,
+) ([]byte, error) {
+	var received []byte
+
+	done := make(chan struct{})
+	rule := newRecvRule(localAddr, remoteAddr, localPort, remotePort)
+	recv := newRecvState(out, key, &received, done)
+	err := inject(out, rule, recv.process, done)
+
+	return received, err
+}
+
+// ==================================================================
+// Firewall helpers
+// ==================================================================
 
 // FirewallRule holds the parameters for a single iptables NFQUEUE rule.
 type FirewallRule struct {
@@ -289,6 +543,29 @@ func findDNP3InIPPacket(pkt []byte) (int, int, error) {
 	return ipHdrLen, tcpHdrLen, nil
 }
 
+// dnp3FrameEnd returns the index one past the last byte of the first DNP3
+// frame in pkt starting at dnp3Start. Returns -1 if the frame is truncated.
+func dnp3FrameEnd(pkt []byte, dnp3Start int) int {
+	if len(pkt) < dnp3Start+3 {
+		return -1
+	}
+
+	lengthByte := int(pkt[dnp3Start+2])
+	if lengthByte < 5 {
+		return -1
+	}
+
+	payloadLen := lengthByte - 5
+	numBlocks := (payloadLen + 15) / 16
+	end := dnp3Start + 10 + payloadLen + numBlocks*2
+
+	if end > len(pkt) {
+		return -1
+	}
+
+	return end
+}
+
 // calcIPChecksum computes the ones-complement 16-bit checksum over an IP header.
 func calcIPChecksum(hdr []byte) uint16 {
 	var sum uint32
@@ -358,27 +635,6 @@ func rebuildChecksums(pkt []byte, ipHdrLen int) {
 	binary.BigEndian.PutUint16(pkt[ipHdrLen+16:], tcs)
 }
 
-// buildDNP3Frame assembles a DNP3 frame from the raw transport+application
-// bytes and the original header prefix (bytes 0-7 of the DNP3 header).
-func buildDNP3Frame(hdrPrefix []byte, rawPayload []byte) []byte {
-	newDataBlocks := dnp3.InsertDNP3CRCs(rawPayload)
-	//nolint:gosec // G115: rawPayload length bounded by maxDNP3Length (255)
-	newLength := byte(5 + len(rawPayload))
-
-	newHdr := make([]byte, 8)
-	copy(newHdr, hdrPrefix[:8])
-	newHdr[2] = newLength
-
-	crc := dnp3.CalculateDNP3CRC(newHdr)
-
-	frame := make([]byte, 0, 8+len(crc)+len(newDataBlocks))
-	frame = append(frame, newHdr...)
-	frame = append(frame, crc...)
-	frame = append(frame, newDataBlocks...)
-
-	return frame
-}
-
 // injectIntoPacket appends marker+covertData to the DNP3 application payload
 // within the raw IP packet. Returns the modified packet and how many covert
 // bytes were consumed. Returns the original packet unchanged (consumed=0) if
@@ -390,34 +646,39 @@ func injectIntoPacket(pkt, covertData, marker []byte) ([]byte, int, error) {
 	}
 
 	dnp3Start := ipHdrLen + tcpHdrLen
-	if len(pkt) < dnp3Start+dnp3HeaderLen {
+
+	frameEnd := dnp3FrameEnd(pkt, dnp3Start)
+	if frameEnd < 0 {
 		return pkt, 0, nil
 	}
 
-	lengthByte := int(pkt[dnp3Start+2])
-	available := maxDNP3Length - lengthByte
+	frame, err := dnp3.NewFrameFromBytes(pkt[dnp3Start:frameEnd])
+	if err != nil || frame.Application == nil {
+		return pkt, 0, nil
+	}
 
+	available := maxDNP3Length - int(frame.DataLink.Length)
 	if available <= markerLen {
 		return pkt, 0, nil
 	}
 
-	_, rawPayload, err := dnp3.RemoveDNP3CRCs(pkt[dnp3Start+dnp3HeaderLen:])
-	if err != nil {
-		return pkt, 0, fmt.Errorf("RemoveDNP3CRCs: %w", err)
-	}
-
 	toSend := min(len(covertData), available-markerLen)
 
-	rawPayload = append(rawPayload, marker...)
-	if toSend > 0 {
-		rawPayload = append(rawPayload, covertData[:toSend]...)
+	appData := frame.Application.GetData()
+	extra := make([]byte, 0, markerLen+toSend)
+	extra = append(extra, marker...)
+	extra = append(extra, covertData[:toSend]...)
+	appData.SetExtra(extra)
+	frame.Application.SetData(appData)
+
+	buf := gopacket.NewSerializeBuffer()
+	if err := frame.SerializeTo(buf, gopacket.SerializeOptions{}); err != nil {
+		return pkt, 0, fmt.Errorf("SerializeTo: %w", err)
 	}
 
-	newFrame := buildDNP3Frame(pkt[dnp3Start:], rawPayload)
-
-	newPkt := make([]byte, dnp3Start+len(newFrame))
+	newPkt := make([]byte, dnp3Start+len(buf.Bytes()))
 	copy(newPkt, pkt[:dnp3Start])
-	copy(newPkt[dnp3Start:], newFrame)
+	copy(newPkt[dnp3Start:], buf.Bytes())
 
 	rebuildChecksums(newPkt, ipHdrLen)
 
@@ -445,66 +706,60 @@ func extractFromPacket(pkt []byte) (markerType, []byte, []byte, error) {
 	}
 
 	dnp3Start := ipHdrLen + tcpHdrLen
-	if len(pkt) < dnp3Start+dnp3HeaderLen {
+
+	frameEnd := dnp3FrameEnd(pkt, dnp3Start)
+	if frameEnd < 0 {
 		return markerNone, nil, pkt, nil
 	}
 
-	_, rawPayload, err := dnp3.RemoveDNP3CRCs(pkt[dnp3Start+dnp3HeaderLen:])
-	if err != nil {
-		return markerNone, nil, pkt, fmt.Errorf("RemoveDNP3CRCs: %w", err)
+	// DecodeFromBytes errors when it hits G0V0 (our marker), but Application
+	// is still set with the valid objects in Objects and our marker in extra.
+	frame := dnp3.NewFrame()
+	_ = frame.DecodeFromBytes(pkt[dnp3Start:frameEnd], gopacket.NilDecodeFeedback)
+
+	if frame.Application == nil {
+		return markerNone, nil, pkt, nil
 	}
 
-	// Scan for marker at each byte offset.
+	appData := frame.Application.GetData()
+	extra := appData.GetExtra()
+
+	if len(extra) < markerLen {
+		return markerNone, nil, pkt, nil
+	}
+
 	var kind markerType
 
-	markerOffset := -1
-
-	for i := 0; i+markerLen <= len(rawPayload); i++ {
-		triplet := rawPayload[i : i+markerLen]
-
-		if bytes.Equal(triplet, sizeMarker) {
-			kind = markerSize
-			markerOffset = i
-
-			break
-		}
-
-		if bytes.Equal(triplet, injectMarker) {
-			kind = markerData
-			markerOffset = i
-
-			break
-		}
-
-		if bytes.Equal(triplet, endMarker) {
-			kind = markerEnd
-			markerOffset = i
-
-			break
-		}
-	}
-
-	if markerOffset < 0 {
+	switch {
+	case bytes.Equal(extra[:markerLen], sizeMarker):
+		kind = markerSize
+	case bytes.Equal(extra[:markerLen], injectMarker):
+		kind = markerData
+	case bytes.Equal(extra[:markerLen], endMarker):
+		kind = markerEnd
+	default:
 		return markerNone, nil, pkt, nil
 	}
 
-	payload := rawPayload[markerOffset+markerLen:]
-	cleanedRaw := rawPayload[:markerOffset]
+	payload := extra[markerLen:]
 
-	newFrame := buildDNP3Frame(pkt[dnp3Start:], cleanedRaw)
+	// Rebuild a clean frame with the covert data stripped.
+	appData.SetExtra(nil)
+	frame.Application.SetData(appData)
 
-	cleanedPkt := make([]byte, dnp3Start+len(newFrame))
-	copy(cleanedPkt, pkt[:dnp3Start])
-	copy(cleanedPkt[dnp3Start:], newFrame)
+	buf := gopacket.NewSerializeBuffer()
+	if err := frame.SerializeTo(buf, gopacket.SerializeOptions{}); err != nil {
+		return markerNone, nil, pkt, fmt.Errorf("SerializeTo: %w", err)
+	}
 
-	rebuildChecksums(cleanedPkt, ipHdrLen)
+	cleanPkt := make([]byte, dnp3Start+len(buf.Bytes()))
+	copy(cleanPkt, pkt[:dnp3Start])
+	copy(cleanPkt[dnp3Start:], buf.Bytes())
 
-	return kind, payload, cleanedPkt, nil
+	rebuildChecksums(cleanPkt, ipHdrLen)
+
+	return kind, payload, cleanPkt, nil
 }
-
-// ==================================================================
-// Forward function constructors
-// ==================================================================
 
 // trySendSizePacket attempts to inject the encrypted size into fwd. Returns true if injected,
 // false if the packet has no room yet or is not DNP3.
@@ -560,228 +815,4 @@ func trySendEndPacket(fwd *forwardInfo) (bool, error) {
 	fwd.payload = newPkt
 
 	return true, nil
-}
-
-//nolint:funlen // multi-phase send state machine: size → data chunks → end marker
-func newSendFunc(
-	out io.Writer,
-	data []byte,
-	key string,
-	done chan struct{},
-) (func(*forwardInfo) error, error) {
-	if uint64(len(data)) > math.MaxUint32 {
-		return nil, fmt.Errorf(
-			"data length %d exceeds maximum of %d bytes", len(data), uint32(math.MaxUint32),
-		)
-	}
-
-	//nolint:gosec // G115: len guarded by math.MaxUint32 check above
-	originalLen := uint32(len(data))
-
-	stream := internal.NewCipherStream(key)
-
-	encSize := make([]byte, sizePayloadLen)
-	binary.BigEndian.PutUint32(encSize, originalLen)
-	stream.XORKeyStream(encSize, encSize)
-
-	enc := make([]byte, len(data))
-	stream.XORKeyStream(enc, data)
-
-	bar := internal.NewProgressBar(out, int(originalLen), "\tSending:\t")
-
-	sizeSent := false
-	remaining := enc
-	isDone := false
-
-	return func(fwd *forwardInfo) error {
-		if isDone {
-			return nil
-		}
-
-		if !sizeSent {
-			sent, err := trySendSizePacket(fwd, encSize)
-			if err != nil {
-				return err
-			}
-
-			sizeSent = sent
-
-			return nil
-		}
-
-		if len(remaining) > 0 {
-			newPkt, consumed, err := injectIntoPacket(fwd.payload, remaining, injectMarker)
-			if err != nil {
-				return fmt.Errorf("injectIntoPacket (data): %w", err)
-			}
-
-			if consumed > 0 {
-				fwd.payload = newPkt
-				remaining = remaining[consumed:]
-				bar.Add(consumed)
-			}
-
-			return nil
-		}
-
-		// All data sent — inject end marker on the next DNP3 packet with room.
-		sent, err := trySendEndPacket(fwd)
-		if err != nil {
-			return err
-		}
-
-		if !sent {
-			return nil // wait for next packet
-		}
-
-		isDone = true
-
-		bar.Finish()
-		fmt.Fprintf(out, ">> All data sent, removing firewall rule\n")
-		close(done)
-
-		return nil
-	}, nil
-}
-
-//nolint:funlen // multi-phase receive state machine: size → data chunks → end marker
-func newRecvFunc(
-	out io.Writer,
-	key string,
-	result *[]byte,
-	done chan struct{},
-) func(*forwardInfo) error {
-	stream := internal.NewCipherStream(key)
-
-	var originalLen uint32
-
-	gotSize := false
-
-	var collected []byte
-
-	var bar interface {
-		Add(n int) error
-		Finish() error
-	}
-
-	return func(fwd *forwardInfo) error {
-		kind, payload, cleaned, err := extractFromPacket(fwd.payload)
-		if err != nil {
-			return fmt.Errorf("extractFromPacket: %w", err)
-		}
-
-		fwd.payload = cleaned
-
-		switch kind { //nolint:exhaustive // markerNone is a no-op pass-through
-		case markerSize:
-			if len(payload) < sizePayloadLen {
-				return fmt.Errorf("size marker payload too short: %d bytes", len(payload))
-			}
-
-			dec := make([]byte, sizePayloadLen)
-			stream.XORKeyStream(dec, payload[:sizePayloadLen])
-			originalLen = binary.BigEndian.Uint32(dec)
-			gotSize = true
-			bar = internal.NewProgressBar(out, int(originalLen), "\tReceiving:\t")
-
-		case markerData:
-			dec := make([]byte, len(payload))
-			stream.XORKeyStream(dec, payload)
-			collected = append(collected, dec...)
-
-			if bar != nil {
-				bar.Add(len(dec))
-			}
-
-		case markerEnd:
-			received := collected
-			//nolint:gosec // G115: len bounded by originalLen (uint32)
-			if gotSize && uint32(len(received)) > originalLen {
-				received = received[:originalLen]
-			}
-
-			*result = received
-
-			if bar != nil {
-				bar.Finish()
-			}
-
-			fmt.Fprintf(out, ">> Data receive complete, removing firewall rule\n")
-			close(done)
-		}
-
-		return nil
-	}
-}
-
-// ==================================================================
-// Exported functions
-// ==================================================================
-
-func ClientInjectReceive(
-	out io.Writer,
-	localAddr, remoteAddr string,
-	localPort, remotePort int,
-	key string,
-) ([]byte, error) {
-	var received []byte
-
-	done := make(chan struct{})
-	rule := newRecvRule(localAddr, remoteAddr, localPort, remotePort)
-	err := inject(out, rule, newRecvFunc(out, key, &received, done), done)
-
-	return received, err
-}
-
-func ServerInjectSend(
-	out io.Writer,
-	localAddr, remoteAddr string,
-	localPort, remotePort int,
-	key string,
-	data []byte,
-) error {
-	done := make(chan struct{})
-
-	sendFn, err := newSendFunc(out, data, key, done)
-	if err != nil {
-		return err
-	}
-
-	rule := newSendRule(localAddr, remoteAddr, localPort, remotePort)
-
-	return inject(out, rule, sendFn, done)
-}
-
-func ClientInjectSend(
-	out io.Writer,
-	localAddr, remoteAddr string,
-	localPort, remotePort int,
-	key string,
-	data []byte,
-) error {
-	done := make(chan struct{})
-
-	sendFn, err := newSendFunc(out, data, key, done)
-	if err != nil {
-		return err
-	}
-
-	rule := newSendRule(localAddr, remoteAddr, localPort, remotePort)
-
-	return inject(out, rule, sendFn, done)
-}
-
-func ServerInjectReceive(
-	out io.Writer,
-	localAddr, remoteAddr string,
-	localPort, remotePort int,
-	key string,
-) ([]byte, error) {
-	var received []byte
-
-	done := make(chan struct{})
-	rule := newRecvRule(localAddr, remoteAddr, localPort, remotePort)
-	err := inject(out, rule, newRecvFunc(out, key, &received, done), done)
-
-	return received, err
 }
