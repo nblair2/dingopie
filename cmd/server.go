@@ -165,7 +165,6 @@ var serverInjectSendCmd = &cobra.Command{
 	},
 }
 
-//nolint:dupl // temporary mock during building
 var serverInjectReceiveCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useRecv,

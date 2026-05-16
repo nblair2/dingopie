@@ -7,25 +7,36 @@ import (
 	"errors"
 )
 
-// findDNP3InIPPacket parses a raw IPv4 packet and returns the IP header length
-// and TCP header length. Returns error if the packet is not IPv4/TCP or does
-// not carry a DNP3 frame (magic bytes 0x05 0x64).
-func findDNP3InIPPacket(pkt []byte) (int, int, error) {
+// findIPv4TCPHeader returns the IP header length for a raw IPv4/TCP packet,
+// without checking for DNP3. Used for SEQ/ACK field adjustments on all packets.
+func findIPv4TCPHeader(pkt []byte) (int, error) {
 	if len(pkt) < 20 {
-		return 0, 0, errors.New("packet too short for IPv4 header")
+		return 0, errors.New("packet too short for IPv4 header")
 	}
 
 	if pkt[0]>>4 != 4 {
-		return 0, 0, errors.New("not an IPv4 packet")
+		return 0, errors.New("not an IPv4 packet")
 	}
 
 	if pkt[9] != 6 {
-		return 0, 0, errors.New("not a TCP packet")
+		return 0, errors.New("not a TCP packet")
 	}
 
 	ipHdrLen := int(pkt[0]&0x0F) * 4
 	if len(pkt) < ipHdrLen+20 {
-		return 0, 0, errors.New("packet too short for TCP header")
+		return 0, errors.New("packet too short for TCP header")
+	}
+
+	return ipHdrLen, nil
+}
+
+// findDNP3InIPPacket parses a raw IPv4 packet and returns the IP header length
+// and TCP header length. Returns error if the packet is not IPv4/TCP or does
+// not carry a DNP3 frame (magic bytes 0x05 0x64).
+func findDNP3InIPPacket(pkt []byte) (int, int, error) {
+	ipHdrLen, err := findIPv4TCPHeader(pkt)
+	if err != nil {
+		return 0, 0, err
 	}
 
 	tcpHdrLen := int(pkt[ipHdrLen+12]>>4) * 4
@@ -40,6 +51,34 @@ func findDNP3InIPPacket(pkt []byte) (int, int, error) {
 	}
 
 	return ipHdrLen, tcpHdrLen, nil
+}
+
+// adjustTCPSeq adds delta to the TCP SEQ field (uint32 modular arithmetic) and
+// rebuilds checksums. Pass uint32(-n) to subtract n.
+func adjustTCPSeq(pkt []byte, ipHdrLen int, delta uint32) {
+	if delta == 0 || len(pkt) < ipHdrLen+8 {
+		return
+	}
+
+	off := ipHdrLen + 4
+	binary.BigEndian.PutUint32(pkt[off:], binary.BigEndian.Uint32(pkt[off:])+delta)
+	rebuildChecksums(pkt, ipHdrLen)
+}
+
+// adjustTCPAck adds delta to the TCP ACK field (uint32 modular arithmetic) if
+// the ACK flag is set, then rebuilds checksums. Pass uint32(-n) to subtract n.
+func adjustTCPAck(pkt []byte, ipHdrLen int, delta uint32) {
+	if delta == 0 || len(pkt) < ipHdrLen+14 {
+		return
+	}
+
+	if pkt[ipHdrLen+13]&0x10 == 0 { // ACK flag
+		return
+	}
+
+	off := ipHdrLen + 8
+	binary.BigEndian.PutUint32(pkt[off:], binary.BigEndian.Uint32(pkt[off:])+delta)
+	rebuildChecksums(pkt, ipHdrLen)
 }
 
 // dnp3FrameEnd returns the index one past the last byte of the first DNP3

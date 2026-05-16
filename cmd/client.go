@@ -158,7 +158,6 @@ var clientInjectCmd = &cobra.Command{
 	},
 }
 
-//nolint:dupl // temporary mock during building
 var clientInjectReceiveCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useRecv,

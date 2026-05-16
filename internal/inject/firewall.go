@@ -52,6 +52,20 @@ func newRecvRule(local, remote string, localPort, remotePort int) *FirewallRule 
 	return newFirewallRule("mangle", "PREROUTING", remote, local, remotePort, localPort)
 }
 
+// newSendAckRule intercepts incoming ACKs from the remote (PREROUTING) so that
+// the local TCP stack sees ACK values that match its unmodified sequence space.
+// Uses the same nfqueue as the data rule so both directions share one handler.
+func newSendAckRule(local, remote string, localPort, remotePort int) *FirewallRule {
+	return newRecvRule(local, remote, localPort, remotePort)
+}
+
+// newRecvAckRule intercepts outgoing ACKs toward the remote (POSTROUTING) so
+// that the sender's TCP stack sees ACK values that include injected bytes.
+// Uses the same nfqueue as the data rule so both directions share one handler.
+func newRecvAckRule(local, remote string, localPort, remotePort int) *FirewallRule {
+	return newSendRule(local, remote, localPort, remotePort)
+}
+
 // ToArgs converts the rule into iptables argument strings.
 func (r *FirewallRule) ToArgs() []string {
 	var args []string

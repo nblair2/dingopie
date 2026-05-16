@@ -123,7 +123,7 @@ func ClientSend(out io.Writer, ip string, port int,
 
 // clientSendProcess handles the connection logic described above. Connect, send size, loop sending data, disconnect.
 //
-//nolint:funlen // line count inflated by formatter wrapping, not added logic
+//nolint:funlen // core logic
 func clientSendProcess(out io.Writer, wait time.Duration) error {
 	_, err := internal.ClientExchange(
 		&frame,
@@ -268,7 +268,7 @@ func ServerReceive(out io.Writer, ip string, port int, key string) ([]byte, erro
 // serverReceiveProcess handles the connection logic described above. Ack connection, receive size, loop receiving
 // data, ack disconnect.
 //
-//nolint:funlen // line count inflated by formatter wrapping, not added logic
+//nolint:funlen // core logic
 func serverReceiveProcess(out io.Writer) recvResult {
 	var data []byte
 

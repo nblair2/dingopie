@@ -71,7 +71,7 @@ type forwardInfo struct {
 
 func inject(
 	out io.Writer,
-	rule *FirewallRule,
+	rules []*FirewallRule,
 	fwdFunc func(*forwardInfo) error,
 	done chan struct{},
 ) error {
@@ -80,21 +80,23 @@ func inject(
 	signal.Notify(sigChan, syscall.SIGINT)
 	defer signal.Stop(sigChan)
 
-	err := addFirewallRule(rule)
-	if err != nil {
-		return fmt.Errorf("error creating firewall rule: %w", err)
-	}
-
-	defer func() {
-		err := deleteFirewallRule(rule)
+	for _, rule := range rules {
+		err := addFirewallRule(rule)
 		if err != nil {
-			fmt.Fprintf(
-				out,
-				"Error deleting firewall rule: %v\nRun 'iptables -F' to flush all rules\n",
-				err,
-			)
+			return fmt.Errorf("error creating firewall rule: %w", err)
 		}
-	}()
+
+		defer func() {
+			err := deleteFirewallRule(rule)
+			if err != nil {
+				fmt.Fprintf(
+					out,
+					"Error deleting firewall rule: %v\nRun 'iptables -F' to flush all rules\n",
+					err,
+				)
+			}
+		}()
+	}
 
 	fmt.Fprintf(out, ">> Intercepting traffic\n")
 
@@ -181,9 +183,17 @@ type sendState struct {
 	bar       *progressbar.ProgressBar
 	out       io.Writer
 	done      chan struct{}
+	seqDelta  uint32
+	localPort uint16
 }
 
-func newSendState(out io.Writer, data []byte, key string, done chan struct{}) (*sendState, error) {
+func newSendState(
+	out io.Writer,
+	data []byte,
+	key string,
+	localPort int,
+	done chan struct{},
+) (*sendState, error) {
 	if uint64(len(data)) > math.MaxUint32 {
 		return nil, fmt.Errorf(
 			"data length %d exceeds maximum of %d bytes", len(data), uint32(math.MaxUint32),
@@ -212,55 +222,85 @@ func newSendState(out io.Writer, data []byte, key string, done chan struct{}) (*
 		bar:       bar,
 		out:       out,
 		done:      done,
+		seqDelta:  0,
+		localPort: uint16(localPort), //nolint:gosec // G115: port numbers fit in uint16
 	}, nil
 }
 
+// process routes the packet to processData (outgoing, src == localPort) or
+// processAck (incoming return ACK) based on the TCP source port.
 func (s *sendState) process(fwd *forwardInfo) error {
-	if s.isDone {
-		return nil
-	}
-
-	if !s.sizeSent {
-		sent, err := trySendSizePacket(fwd, s.encSize)
-		if err != nil {
-			return err
-		}
-
-		s.sizeSent = sent
-
-		return nil
-	}
-
-	if len(s.remaining) > 0 {
-		newPkt, consumed, err := injectIntoPacket(fwd.payload, s.remaining, injectMarker)
-		if err != nil {
-			return fmt.Errorf("injectIntoPacket (data): %w", err)
-		}
-
-		if consumed > 0 {
-			fwd.payload = newPkt
-			s.remaining = s.remaining[consumed:]
-			s.bar.Add(consumed)
-		}
-
-		return nil
-	}
-
-	// All data sent — inject end marker on the next DNP3 packet with room.
-	sent, err := trySendEndPacket(fwd)
+	ipHdrLen, err := findIPv4TCPHeader(fwd.payload)
 	if err != nil {
-		return err
-	}
-
-	if !sent {
+		//nolint:nilerr // non-TCP/IP packets pass through silently
 		return nil
 	}
 
-	s.isDone = true
+	if binary.BigEndian.Uint16(fwd.payload[ipHdrLen:]) == s.localPort {
+		return s.processData(fwd, ipHdrLen)
+	}
 
-	s.bar.Finish()
-	fmt.Fprintf(s.out, ">> All data sent, removing firewall rule\n")
-	close(s.done)
+	return s.processAck(fwd, ipHdrLen)
+}
+
+// processData injects covert bytes into an outgoing packet and adjusts its TCP
+// SEQ so the receiver sees a continuous stream that includes all injected bytes.
+//
+//nolint:gocritic,nestif //needs refactor
+func (s *sendState) processData(fwd *forwardInfo, ipHdrLen int) error {
+	prevDelta := s.seqDelta
+	originalLen := len(fwd.payload)
+
+	if !s.isDone {
+		if !s.sizeSent {
+			sent, err := trySendSizePacket(fwd, s.encSize)
+			if err != nil {
+				return err
+			}
+
+			s.sizeSent = sent
+		} else if len(s.remaining) > 0 {
+			newPkt, consumed, err := injectIntoPacket(fwd.payload, s.remaining, injectMarker)
+			if err != nil {
+				return fmt.Errorf("injectIntoPacket (data): %w", err)
+			}
+
+			if consumed > 0 {
+				fwd.payload = newPkt
+				s.remaining = s.remaining[consumed:]
+				s.bar.Add(consumed)
+			}
+		} else {
+			sent, err := trySendEndPacket(fwd)
+			if err != nil {
+				return err
+			}
+
+			if sent {
+				s.isDone = true
+				s.bar.Finish()
+				fmt.Fprintf(s.out, ">> All data sent, removing firewall rule\n")
+				close(s.done)
+			}
+		}
+	}
+
+	adjustTCPSeq(fwd.payload, ipHdrLen, prevDelta)
+
+	//nolint:gosec //G115: clamped by TCP ACK size
+	growth := uint32(len(fwd.payload) - originalLen)
+	if growth > 0 {
+		s.seqDelta += growth
+	}
+
+	return nil
+}
+
+// processAck subtracts seqDelta from incoming ACKs so the local TCP stack sees
+// ACK values within its original (unmodified) sequence space.
+func (s *sendState) processAck(fwd *forwardInfo, ipHdrLen int) error {
+	//nolint:gosec //G115: clamped by TCP ACK size
+	adjustTCPAck(fwd.payload, ipHdrLen, uint32(-int32(s.seqDelta)))
 
 	return nil
 }
@@ -278,25 +318,68 @@ type recvState struct {
 	out         io.Writer
 	done        chan struct{}
 	result      *[]byte
+	seqDelta    uint32
+	remotePort  uint16
 }
 
-func newRecvState(out io.Writer, key string, result *[]byte, done chan struct{}) *recvState {
+func newRecvState(
+	out io.Writer,
+	key string,
+	remotePort int,
+	result *[]byte,
+	done chan struct{},
+) *recvState {
 	//nolint:exhaustruct // Use defaults
 	return &recvState{
-		stream: internal.NewCipherStream(key),
-		out:    out,
-		done:   done,
-		result: result,
+		stream:     internal.NewCipherStream(key),
+		out:        out,
+		done:       done,
+		result:     result,
+		seqDelta:   0,
+		remotePort: uint16(remotePort), //nolint:gosec // G115: port numbers fit in uint16
 	}
 }
 
+// process routes the packet to processData (incoming from remote, src == remotePort)
+// or processAck (outgoing ACK back to remote) based on the TCP source port.
 func (r *recvState) process(fwd *forwardInfo) error {
+	ipHdrLen, err := findIPv4TCPHeader(fwd.payload)
+	if err != nil {
+		//nolint:nilerr // non-TCP/IP packets pass through silently
+		return nil
+	}
+
+	if binary.BigEndian.Uint16(fwd.payload[ipHdrLen:]) == r.remotePort {
+		return r.processData(fwd, ipHdrLen)
+	}
+
+	return r.processAck(fwd, ipHdrLen)
+}
+
+// processData strips the covert payload from an incoming packet and adjusts its
+// TCP SEQ to undo the sender's inflation so the local stack sees clean sequence numbers.
+//
+//nolint:cyclop // core logic
+func (r *recvState) processData(fwd *forwardInfo, ipHdrLen int) error {
+	prevDelta := r.seqDelta
+	wireLen := len(fwd.payload)
+
 	kind, payload, cleaned, err := extractFromPacket(fwd.payload)
 	if err != nil {
 		return fmt.Errorf("extractFromPacket: %w", err)
 	}
 
 	fwd.payload = cleaned
+
+	// Subtract prevDelta from SEQ to undo the sender's cumulative inflation.
+	//nolint:gosec //G115: clamped by TCP ACK size
+	adjustTCPSeq(fwd.payload, ipHdrLen, uint32(-int32(prevDelta)))
+
+	//nolint:gosec //G115: clamped by TCP ACK size
+	stripped := uint32(wireLen - len(cleaned))
+	if stripped > 0 {
+		r.seqDelta += stripped
+	}
 
 	switch kind { //nolint:exhaustive // markerNone is a no-op pass-through
 	case markerSize:
@@ -339,6 +422,14 @@ func (r *recvState) process(fwd *forwardInfo) error {
 	return nil
 }
 
+// processAck adds seqDelta to outgoing ACKs so the sender's TCP stack sees
+// ACK values that account for the injected bytes it sent.
+func (r *recvState) processAck(fwd *forwardInfo, ipHdrLen int) error {
+	adjustTCPAck(fwd.payload, ipHdrLen, r.seqDelta)
+
+	return nil
+}
+
 // ==================================================================
 // Exported functions
 // ==================================================================
@@ -353,9 +444,12 @@ func ClientInjectReceive(
 	var received []byte
 
 	done := make(chan struct{})
-	rule := newRecvRule(localAddr, remoteAddr, localPort, remotePort)
-	recv := newRecvState(out, key, &received, done)
-	err := inject(out, rule, recv.process, done)
+	recv := newRecvState(out, key, remotePort, &received, done)
+	rules := []*FirewallRule{
+		newRecvRule(localAddr, remoteAddr, localPort, remotePort),    // incoming data
+		newRecvAckRule(localAddr, remoteAddr, localPort, remotePort), // outgoing ACKs
+	}
+	err := inject(out, rules, recv.process, done)
 
 	return received, err
 }
@@ -370,14 +464,17 @@ func ServerInjectSend(
 ) error {
 	done := make(chan struct{})
 
-	send, err := newSendState(out, data, key, done)
+	send, err := newSendState(out, data, key, localPort, done)
 	if err != nil {
 		return err
 	}
 
-	rule := newSendRule(localAddr, remoteAddr, localPort, remotePort)
+	rules := []*FirewallRule{
+		newSendRule(localAddr, remoteAddr, localPort, remotePort),    // outgoing data
+		newSendAckRule(localAddr, remoteAddr, localPort, remotePort), // incoming ACKs
+	}
 
-	return inject(out, rule, send.process, done)
+	return inject(out, rules, send.process, done)
 }
 
 // ClientInjectSend - dingopie client inject send.
@@ -390,14 +487,17 @@ func ClientInjectSend(
 ) error {
 	done := make(chan struct{})
 
-	send, err := newSendState(out, data, key, done)
+	send, err := newSendState(out, data, key, localPort, done)
 	if err != nil {
 		return err
 	}
 
-	rule := newSendRule(localAddr, remoteAddr, localPort, remotePort)
+	rules := []*FirewallRule{
+		newSendRule(localAddr, remoteAddr, localPort, remotePort),    // outgoing data
+		newSendAckRule(localAddr, remoteAddr, localPort, remotePort), // incoming ACKs
+	}
 
-	return inject(out, rule, send.process, done)
+	return inject(out, rules, send.process, done)
 }
 
 // ServerInjectReceive - dingopie server inject receive.
@@ -410,9 +510,12 @@ func ServerInjectReceive(
 	var received []byte
 
 	done := make(chan struct{})
-	rule := newRecvRule(localAddr, remoteAddr, localPort, remotePort)
-	recv := newRecvState(out, key, &received, done)
-	err := inject(out, rule, recv.process, done)
+	recv := newRecvState(out, key, remotePort, &received, done)
+	rules := []*FirewallRule{
+		newRecvRule(localAddr, remoteAddr, localPort, remotePort),    // incoming data
+		newRecvAckRule(localAddr, remoteAddr, localPort, remotePort), // outgoing ACKs
+	}
+	err := inject(out, rules, recv.process, done)
 
 	return received, err
 }

@@ -9,7 +9,7 @@ services:
     cap_add:
       - NET_ADMIN
     init: true
-    command: ["outstation-demo", "20000", "1"]
+    command: ["outstation-demo", "20000", "2"]
     stop_grace_period: 1s
     networks:
       test:
@@ -24,7 +24,7 @@ services:
     cap_add:
       - NET_ADMIN
     init: true
-    command: ["master-demo", "outstation", "20000", "0.2"]
+    command: ["master-demo", "outstation", "20000", "1"]
     stop_grace_period: 1s
     depends_on:
       - outstation
