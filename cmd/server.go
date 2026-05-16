@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/dingopie/internal/inject"
 	"github.com/nblair2/dingopie/internal/primary"
 	"github.com/nblair2/dingopie/internal/secondary"
 	"github.com/nblair2/dingopie/internal/shell"
@@ -70,19 +69,7 @@ var serverDirectReceiveCmd = &cobra.Command{
 	Use:     useRecv,
 	Short:   "receive data from client",
 	Run: func(cmd *cobra.Command, _ []string) {
-		var (
-			f   *os.File
-			err error
-		)
-
-		if file != "" {
-			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode)
-			if err != nil {
-				cmd.Printf("Error opening file %s: %v\n", file, err)
-				os.Exit(1)
-			}
-			defer f.Close()
-		}
+		f := openOutFile(cmd)
 
 		data, err := primary.ServerReceive(cmd.OutOrStdout(), serverIP, serverPort, key)
 		if err != nil {
@@ -92,18 +79,7 @@ var serverDirectReceiveCmd = &cobra.Command{
 			)
 		}
 
-		if file != "" {
-			_, err := f.Write(data)
-			if err != nil {
-				cmd.Printf("Error writing to file: %v\n", err)
-				cmd.Printf(">> Attempting to output what data we have: %s\n", string(data))
-				os.Exit(1)
-			}
-
-			cmd.Printf(">> Data written to %s\n", file)
-		} else {
-			cmd.Printf(">> Message: %s\n", string(data))
-		}
+		writeOut(cmd, f, data)
 	},
 }
 
@@ -149,19 +125,7 @@ var serverInjectSendCmd = &cobra.Command{
 	Use:     useSend,
 	Short:   "send data to client",
 	Run: func(cmd *cobra.Command, args []string) {
-		data, err := getData(cmd, file, args)
-		if err != nil {
-			cmd.Printf("Error getting data: %v\n", err)
-			os.Exit(1)
-		}
-
-		err = inject.ServerInjectSend(
-			cmd.OutOrStdout(), serverIP, clientIP, serverPort, clientPort, key, data,
-		)
-		if err != nil {
-			cmd.Printf("Error with inject send: %v\n", err)
-			os.Exit(1)
-		}
+		runInjectSend(cmd, args, serverIP, clientIP, serverPort, clientPort)
 	},
 }
 
@@ -170,42 +134,7 @@ var serverInjectReceiveCmd = &cobra.Command{
 	Use:     useRecv,
 	Short:   "receive data from client",
 	Run: func(cmd *cobra.Command, _ []string) {
-		var (
-			f   *os.File
-			err error
-		)
-
-		if file != "" {
-			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode)
-			if err != nil {
-				cmd.Printf("Error opening file %s: %v\n", file, err)
-				os.Exit(1)
-			}
-			defer f.Close()
-		}
-
-		data, err := inject.ServerInjectReceive(
-			cmd.OutOrStdout(), serverIP, clientIP, serverPort, clientPort, key,
-		)
-		if err != nil {
-			cmd.Printf(
-				"Error with inject receive: %v\nAttempting to output what data we have\n",
-				err,
-			)
-		}
-
-		if file != "" {
-			_, err := f.Write(data)
-			if err != nil {
-				cmd.Printf("Error writing to file: %v\n", err)
-				cmd.Printf(">> Data received: %s\n", string(data))
-				os.Exit(1)
-			}
-
-			cmd.Printf(">> Data written to %s\n", file)
-		} else {
-			cmd.Printf(">> Message: %s\n", string(data))
-		}
+		runInjectReceive(cmd, serverIP, clientIP, serverPort, clientPort)
 	},
 }
 

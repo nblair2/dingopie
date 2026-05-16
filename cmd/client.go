@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/dingopie/internal/inject"
 	"github.com/nblair2/dingopie/internal/primary"
 	"github.com/nblair2/dingopie/internal/secondary"
 	"github.com/nblair2/dingopie/internal/shell"
@@ -81,19 +80,7 @@ var clientDirectReceiveCmd = &cobra.Command{
 	Use:     useRecv,
 	Short:   "receive data from server",
 	Run: func(cmd *cobra.Command, _ []string) {
-		var (
-			f   *os.File
-			err error
-		)
-
-		if file != "" {
-			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode)
-			if err != nil {
-				cmd.Printf("Error opening file %s: %v\n", file, err)
-				os.Exit(1)
-			}
-			defer f.Close()
-		}
+		f := openOutFile(cmd)
 
 		data, err := secondary.ClientReceive(cmd.OutOrStdout(), serverIP, serverPort, key, wait)
 		if err != nil {
@@ -103,18 +90,7 @@ var clientDirectReceiveCmd = &cobra.Command{
 			)
 		}
 
-		if file != "" {
-			_, err := f.Write(data)
-			if err != nil {
-				cmd.Printf("Error writing to file: %v\n", err)
-				cmd.Printf(">> Data received: %s\n", string(data))
-				os.Exit(1)
-			}
-
-			cmd.Printf(">> Data written to %s\n", file)
-		} else {
-			cmd.Printf(">> Message: %s\n", string(data))
-		}
+		writeOut(cmd, f, data)
 	},
 }
 
@@ -163,42 +139,7 @@ var clientInjectReceiveCmd = &cobra.Command{
 	Use:     useRecv,
 	Short:   "receive data from server",
 	Run: func(cmd *cobra.Command, _ []string) {
-		var (
-			f   *os.File
-			err error
-		)
-
-		if file != "" {
-			f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode)
-			if err != nil {
-				cmd.Printf("Error opening file %s: %v\n", file, err)
-				os.Exit(1)
-			}
-			defer f.Close()
-		}
-
-		data, err := inject.ClientInjectReceive(
-			cmd.OutOrStdout(), clientIP, serverIP, clientPort, serverPort, key,
-		)
-		if err != nil {
-			cmd.Printf(
-				"Error with inject receive: %v\nAttempting to output what data we have\n",
-				err,
-			)
-		}
-
-		if file != "" {
-			_, err := f.Write(data)
-			if err != nil {
-				cmd.Printf("Error writing to file: %v\n", err)
-				cmd.Printf(">> Data received: %s\n", string(data))
-				os.Exit(1)
-			}
-
-			cmd.Printf(">> Data written to %s\n", file)
-		} else {
-			cmd.Printf(">> Message: %s\n", string(data))
-		}
+		runInjectReceive(cmd, clientIP, serverIP, clientPort, serverPort)
 	},
 }
 
@@ -207,26 +148,14 @@ var clientInjectSendCmd = &cobra.Command{
 	Use:     useSend,
 	Short:   "send data to server",
 	Run: func(cmd *cobra.Command, args []string) {
-		data, err := getData(cmd, file, args)
-		if err != nil {
-			cmd.Printf("Error getting data: %v\n", err)
-			os.Exit(1)
-		}
-
-		err = inject.ClientInjectSend(
-			cmd.OutOrStdout(), clientIP, serverIP, clientPort, serverPort, key, data,
-		)
-		if err != nil {
-			cmd.Printf("Error with inject send: %v\n", err)
-			os.Exit(1)
-		}
+		runInjectSend(cmd, args, clientIP, serverIP, clientPort, serverPort)
 	},
 }
 
 func init() {
 	clientCmd.AddGroup(&cobra.Group{ID: groupMode, Title: titleMode})
-	clientCmd.AddCommand(clientDirectCmd)
 
+	clientCmd.AddCommand(clientDirectCmd)
 	clientDirectCmd.AddGroup(&cobra.Group{ID: groupAction, Title: titleAction})
 	clientDirectCmd.AddCommand(clientDirectSendCmd)
 	clientDirectCmd.AddCommand(clientDirectReceiveCmd)

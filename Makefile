@@ -57,13 +57,13 @@ fix:
 	codespell -w .
 	$$(go env GOPATH)/bin/golangci-lint run ./... --fix
 
-lint:
-	$$(go env GOPATH)/bin/golangci-lint run ./...
-
 spell:
 	codespell .
 
-check: lint spell
+lint:
+	$$(go env GOPATH)/bin/golangci-lint run ./...
+
+check: spell lint
 
 ##  ------------------------- Build  -------------------------------------
 

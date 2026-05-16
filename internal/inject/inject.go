@@ -176,22 +176,23 @@ func newChanToFunc(out io.Writer, forward chan forwardInfo, fwdFunc func(*forwar
 // ==================================================================
 
 type sendState struct {
-	encSize   []byte
-	remaining []byte
-	sizeSent  bool
-	isDone    bool
-	bar       *progressbar.ProgressBar
-	out       io.Writer
-	done      chan struct{}
-	seqDelta  uint32
-	localPort uint16
+	encSize    []byte
+	remaining  []byte
+	sizeSent   bool
+	isDone     bool
+	bar        *progressbar.ProgressBar
+	out        io.Writer
+	done       chan struct{}
+	seqDelta   uint32
+	localPort  uint16
+	remotePort uint16
 }
 
 func newSendState(
 	out io.Writer,
 	data []byte,
 	key string,
-	localPort int,
+	localPort, remotePort int,
 	done chan struct{},
 ) (*sendState, error) {
 	if uint64(len(data)) > math.MaxUint32 {
@@ -215,20 +216,22 @@ func newSendState(
 	bar := internal.NewProgressBar(out, int(originalLen), "\tSending:\t")
 
 	return &sendState{
-		encSize:   encSize,
-		remaining: enc,
-		sizeSent:  false,
-		isDone:    false,
-		bar:       bar,
-		out:       out,
-		done:      done,
-		seqDelta:  0,
-		localPort: uint16(localPort), //nolint:gosec // G115: port numbers fit in uint16
+		encSize:    encSize,
+		remaining:  enc,
+		sizeSent:   false,
+		isDone:     false,
+		bar:        bar,
+		out:        out,
+		done:       done,
+		seqDelta:   0,
+		localPort:  uint16(localPort),  //nolint:gosec // G115: port numbers fit in uint16
+		remotePort: uint16(remotePort), //nolint:gosec // G115: port numbers fit in uint16
 	}, nil
 }
 
-// process routes the packet to processData (outgoing, src == localPort) or
-// processAck (incoming return ACK) based on the TCP source port.
+// process routes the packet to processData (outgoing) or processAck (incoming ACK).
+// When localPort is known (non-zero), outgoing packets have srcPort==localPort.
+// When localPort is zero (ephemeral, unfiltered), outgoing packets have dstPort==remotePort.
 func (s *sendState) process(fwd *forwardInfo) error {
 	ipHdrLen, err := findIPv4TCPHeader(fwd.payload)
 	if err != nil {
@@ -236,7 +239,17 @@ func (s *sendState) process(fwd *forwardInfo) error {
 		return nil
 	}
 
-	if binary.BigEndian.Uint16(fwd.payload[ipHdrLen:]) == s.localPort {
+	srcPort := binary.BigEndian.Uint16(fwd.payload[ipHdrLen:])
+	dstPort := binary.BigEndian.Uint16(fwd.payload[ipHdrLen+2:])
+
+	var isData bool
+	if s.localPort != 0 {
+		isData = srcPort == s.localPort
+	} else {
+		isData = dstPort == s.remotePort
+	}
+
+	if isData {
 		return s.processData(fwd, ipHdrLen)
 	}
 
@@ -320,12 +333,13 @@ type recvState struct {
 	result      *[]byte
 	seqDelta    uint32
 	remotePort  uint16
+	localPort   uint16
 }
 
 func newRecvState(
 	out io.Writer,
 	key string,
-	remotePort int,
+	remotePort, localPort int,
 	result *[]byte,
 	done chan struct{},
 ) *recvState {
@@ -337,11 +351,13 @@ func newRecvState(
 		result:     result,
 		seqDelta:   0,
 		remotePort: uint16(remotePort), //nolint:gosec // G115: port numbers fit in uint16
+		localPort:  uint16(localPort),  //nolint:gosec // G115: port numbers fit in uint16
 	}
 }
 
-// process routes the packet to processData (incoming from remote, src == remotePort)
-// or processAck (outgoing ACK back to remote) based on the TCP source port.
+// process routes the packet to processData (incoming) or processAck (outgoing ACK).
+// When remotePort is known (non-zero), incoming packets have srcPort==remotePort.
+// When remotePort is zero (ephemeral, unfiltered), incoming packets have dstPort==localPort.
 func (r *recvState) process(fwd *forwardInfo) error {
 	ipHdrLen, err := findIPv4TCPHeader(fwd.payload)
 	if err != nil {
@@ -349,7 +365,17 @@ func (r *recvState) process(fwd *forwardInfo) error {
 		return nil
 	}
 
-	if binary.BigEndian.Uint16(fwd.payload[ipHdrLen:]) == r.remotePort {
+	srcPort := binary.BigEndian.Uint16(fwd.payload[ipHdrLen:])
+	dstPort := binary.BigEndian.Uint16(fwd.payload[ipHdrLen+2:])
+
+	var isData bool
+	if r.remotePort != 0 {
+		isData = srcPort == r.remotePort
+	} else {
+		isData = dstPort == r.localPort
+	}
+
+	if isData {
 		return r.processData(fwd, ipHdrLen)
 	}
 
@@ -434,28 +460,10 @@ func (r *recvState) processAck(fwd *forwardInfo, ipHdrLen int) error {
 // Exported functions
 // ==================================================================
 
-// ClientInjectReceive - dingopie client inject receive.
-func ClientInjectReceive(
-	out io.Writer,
-	localAddr, remoteAddr string,
-	localPort, remotePort int,
-	key string,
-) ([]byte, error) {
-	var received []byte
-
-	done := make(chan struct{})
-	recv := newRecvState(out, key, remotePort, &received, done)
-	rules := []*FirewallRule{
-		newRecvRule(localAddr, remoteAddr, localPort, remotePort),    // incoming data
-		newRecvAckRule(localAddr, remoteAddr, localPort, remotePort), // outgoing ACKs
-	}
-	err := inject(out, rules, recv.process, done)
-
-	return received, err
-}
-
-// ServerInjectSend - dingopie server inject send.
-func ServerInjectSend(
+// Send injects data into an existing DNP3 channel.
+// localAddr/localPort identify the dingopie-controlled side; remoteAddr/remotePort
+// identify the peer. The caller swaps these to express server vs client perspective.
+func Send(
 	out io.Writer,
 	localAddr, remoteAddr string,
 	localPort, remotePort int,
@@ -464,7 +472,7 @@ func ServerInjectSend(
 ) error {
 	done := make(chan struct{})
 
-	send, err := newSendState(out, data, key, localPort, done)
+	send, err := newSendState(out, data, key, localPort, remotePort, done)
 	if err != nil {
 		return err
 	}
@@ -477,31 +485,10 @@ func ServerInjectSend(
 	return inject(out, rules, send.process, done)
 }
 
-// ClientInjectSend - dingopie client inject send.
-func ClientInjectSend(
-	out io.Writer,
-	localAddr, remoteAddr string,
-	localPort, remotePort int,
-	key string,
-	data []byte,
-) error {
-	done := make(chan struct{})
-
-	send, err := newSendState(out, data, key, localPort, done)
-	if err != nil {
-		return err
-	}
-
-	rules := []*FirewallRule{
-		newSendRule(localAddr, remoteAddr, localPort, remotePort),    // outgoing data
-		newSendAckRule(localAddr, remoteAddr, localPort, remotePort), // incoming ACKs
-	}
-
-	return inject(out, rules, send.process, done)
-}
-
-// ServerInjectReceive - dingopie server inject receive.
-func ServerInjectReceive(
+// Receive receives data from an existing DNP3 channel.
+// localAddr/localPort identify the dingopie-controlled side; remoteAddr/remotePort
+// identify the peer. The caller swaps these to express server vs client perspective.
+func Receive(
 	out io.Writer,
 	localAddr, remoteAddr string,
 	localPort, remotePort int,
@@ -510,7 +497,7 @@ func ServerInjectReceive(
 	var received []byte
 
 	done := make(chan struct{})
-	recv := newRecvState(out, key, remotePort, &received, done)
+	recv := newRecvState(out, key, remotePort, localPort, &received, done)
 	rules := []*FirewallRule{
 		newRecvRule(localAddr, remoteAddr, localPort, remotePort),    // incoming data
 		newRecvAckRule(localAddr, remoteAddr, localPort, remotePort), // outgoing ACKs

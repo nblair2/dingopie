@@ -48,7 +48,7 @@ echo "--> Starting Docker containers"
 docker compose -f docker/docker-compose.yml up -d
 
 echo "--> Waiting for DNP3 stream to establish"
-sleep 2
+sleep 1
 
 KEY="$(cat results/key.txt)"
 

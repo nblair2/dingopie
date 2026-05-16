@@ -10,9 +10,9 @@ builds:
   - env:
       - CGO_ENABLED=0
       # Garble everything except for:
-      # go-packet (takes too long)
-      # go-cmp    (only used in tests)
-      # cobra     (uses reflection for commands)
+      # go-packet   (takes too long)
+      # go-cmp      (only used in tests)
+      # cobra,pflag (uses reflection for commands)
       - GOGARBLE=github.com/coreos/go-iptables,github.com/creack/pty,github.com/florianl/go-nfqueue,github.com/nblair2/go-dnp3/v2,github.com/schollz/progressbar/v3,golang.org/x/term
     # Trick goreleaser into using garble as the build tool
     tool: garble
