@@ -25,17 +25,24 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/nblair2/go-dnp3/v2/dnp3"
 )
 
 // ==================================================================
 // COMMON
 // ==================================================================
+
+const (
+	maxPointsServer        = 60
+	sizePrefixBytes        = 4 // uint32 length prefix
+	disconnectMsgDataBytes = 4 // G30V1Q0 carries 4 bytes of data + 1 flag byte per point
+)
 
 var (
 	initiateConnection = internal.DNP3ReadClass1230
@@ -55,14 +62,14 @@ var (
 // ==================================================================
 
 // ServerSend - dingopie server direct send.
-func ServerSend(ip string, port int,
+func ServerSend(out io.Writer, ip string, port int,
 	key string,
 	data []byte,
 	points int, pointVarriance float32,
 ) error {
 	var err error
 
-	pointsLow, pointsHigh := internal.GetPointVarianceRange(points, pointVarriance, 60)
+	pointsLow, pointsHigh := internal.GetPointVarianceRange(points, pointVarriance, maxPointsServer)
 
 	dataSeq, err = internal.NewDataSequence(key, data, pointsLow, pointsHigh)
 	if err != nil {
@@ -80,7 +87,7 @@ func ServerSend(ip string, port int,
 	}
 	defer ln.Close()
 
-	fmt.Printf(">> Listening on %s\n", socket)
+	fmt.Fprintf(out, ">> Listening on %s\n", socket)
 
 	conn, err := ln.Accept()
 	if err != nil {
@@ -88,14 +95,14 @@ func ServerSend(ip string, port int,
 	}
 	defer conn.Close()
 
-	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
+	fmt.Fprintf(out, "\tConnection %s\n", conn.RemoteAddr().String())
 
 	// run go funcs
 	connErrChan := make(chan error, 1)
 	procErrChan := make(chan error, 1)
 
 	go func() { connErrChan <- internal.ServerHandleConn(conn, recvChan, sendChan) }()
-	go func() { procErrChan <- serverProcess() }()
+	go func() { procErrChan <- serverProcess(out) }()
 
 	for completed := 0; completed < 2; {
 		select {
@@ -113,14 +120,14 @@ func ServerSend(ip string, port int,
 
 			completed++
 
-			fmt.Println("\tAll data sent, waiting for client to close TCP connection")
+			fmt.Fprintln(out, "\tAll data sent, waiting for client to close TCP connection")
 		}
 	}
 
 	return nil
 }
 
-func serverProcess() error {
+func serverProcess(out io.Writer) error {
 	_, err := internal.ServerExchange(
 		&frame,
 		initiateConnection,
@@ -133,7 +140,7 @@ func serverProcess() error {
 		return fmt.Errorf("error during handshake: %w", err)
 	}
 
-	bar := internal.NewProgressBar(int(dataSeq.OriginalLength), "\tSending:\t")
+	bar := internal.NewProgressBar(out, int(dataSeq.OriginalLength), "\tSending:\t")
 
 	for _, chunk := range dataSeq.DataChunks {
 		_, err := internal.ServerExchange(
@@ -155,7 +162,7 @@ func serverProcess() error {
 		&frame,
 		getData,
 		disconnect,
-		[][]byte{append([]byte{1}, internal.NewRandomBytes(4)...)},
+		[][]byte{append([]byte{1}, internal.NewRandomBytes(disconnectMsgDataBytes)...)},
 		recvChan,
 		sendChan,
 	)
@@ -178,7 +185,13 @@ type recvResult struct {
 }
 
 // ClientReceive - dingopie client direct receive.
-func ClientReceive(ip string, port int, key string, wait time.Duration) ([]byte, error) {
+func ClientReceive(
+	out io.Writer,
+	ip string,
+	port int,
+	key string,
+	wait time.Duration,
+) ([]byte, error) {
 	frame = internal.NewDNP3RequestFrame()
 	rxCipher = internal.NewCipherStream(key)
 
@@ -188,27 +201,27 @@ func ClientReceive(ip string, port int, key string, wait time.Duration) ([]byte,
 	}
 	defer conn.Close()
 
-	fmt.Printf(">> Connected to %s:%d\n", ip, port)
+	fmt.Fprintf(out, ">> Connected to %s:%d\n", ip, port)
 
 	connErrChan := make(chan error, 1)
 	procErrChan := make(chan recvResult, 1)
 
 	go func() { connErrChan <- internal.ClientHandleConn(conn, sendChan, recvChan) }()
-	go func() { procErrChan <- clientReceiveProcess(wait) }()
+	go func() { procErrChan <- clientReceiveProcess(out, wait) }()
 
 	for {
 		select {
 		case err := <-connErrChan:
 			return nil, fmt.Errorf("error with connection: %w", err)
 		case result := <-procErrChan:
-			fmt.Println(">> Data receive complete, closing TCP connection")
+			fmt.Fprintln(out, ">> Data receive complete, closing TCP connection")
 
 			return result.data, result.err
 		}
 	}
 }
 
-func clientReceiveProcess(wait time.Duration) recvResult {
+func clientReceiveProcess(out io.Writer, wait time.Duration) recvResult {
 	var data []byte
 
 	recvDataSlice, err := internal.ClientExchange(
@@ -222,14 +235,14 @@ func clientReceiveProcess(wait time.Duration) recvResult {
 	}
 
 	recvData := bytes.Join(recvDataSlice, nil)
-	if len(recvData) != 4 {
+	if len(recvData) != sizePrefixBytes {
 		return recvResult{data, fmt.Errorf("unexpected size data length: %d", len(recvData))}
 	}
 
 	decSize := make([]byte, len(recvData))
 	rxCipher.XORKeyStream(decSize, recvData)
 	size := int(binary.BigEndian.Uint32(decSize))
-	bar := internal.NewProgressBar(size, "\tReceiving:\t")
+	bar := internal.NewProgressBar(out, size, "\tReceiving:\t")
 
 	for len(data) < size {
 		time.Sleep(wait)

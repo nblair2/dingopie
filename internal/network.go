@@ -7,8 +7,11 @@ import (
 	"net"
 	"slices"
 
-	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/nblair2/go-dnp3/v2/dnp3"
 )
+
+// TCPReadBufferSize is the buffer length used when reading from a TCP connection.
+const TCPReadBufferSize = 4096
 
 // ClientHandleConn manages a client (DNP3 master) connection, in pairs of write/read.
 func ClientHandleConn(conn net.Conn, write <-chan []byte, read chan<- []byte) error {
@@ -18,7 +21,7 @@ func ClientHandleConn(conn net.Conn, write <-chan []byte, read chan<- []byte) er
 			return fmt.Errorf("error writing to connection: %w", err)
 		}
 
-		buf := make([]byte, 4096)
+		buf := make([]byte, TCPReadBufferSize)
 
 		n, err := conn.Read(buf)
 		if errors.Is(err, io.EOF) {
@@ -37,7 +40,7 @@ func ClientHandleConn(conn net.Conn, write <-chan []byte, read chan<- []byte) er
 // ServerHandleConn manages a server (DNP3 outstation) connection, in pairs of read/write.
 func ServerHandleConn(conn net.Conn, read chan<- []byte, write <-chan []byte) error {
 	for {
-		buf := make([]byte, 4096)
+		buf := make([]byte, TCPReadBufferSize)
 
 		n, err := conn.Read(buf)
 		if errors.Is(err, io.EOF) {
@@ -68,7 +71,7 @@ func SendMessage(frame *dnp3.Frame, headers, data [][]byte, sendChan chan<- []by
 		return errors.New("headers and data length mismatch")
 	}
 
-	sendPairs := make([][]byte, 0, len(headers)*2)
+	sendPairs := make([][]byte, 0, len(headers)+len(data))
 	for i := range headers {
 		sendPairs = append(sendPairs, headers[i], data[i])
 	}

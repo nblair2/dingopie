@@ -6,7 +6,8 @@ import (
 	"math/rand"
 	"slices"
 
-	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/google/gopacket"
+	"github.com/nblair2/go-dnp3/v2/dnp3"
 )
 
 const (
@@ -109,6 +110,27 @@ var (
 		// Stop Index
 		// n * (1 byte flag + 4 bytes of data) TODO check this
 	}
+
+	// DNP3G0V0QFA object header G0, V0, QFA - Invalid object.
+	DNP3G0V0QFA = []byte{
+		0x00, // Group 0
+		0x00, // Variation 0
+		0xFA, // Qualifier Fields F: reserved, range spec A reserved
+	}
+
+	// DNP3G0V0QFC object header G0, V0, QFC - Invalid object.
+	DNP3G0V0QFC = []byte{
+		0x00, // Group 0
+		0x00, // Variation 0
+		0xFC, // Qualifier Fields F: reserved, range spec C reserved
+	}
+
+	// DNP3G0V0QFD object header G0, V0, QFD - Invalid object.
+	DNP3G0V0QFD = []byte{
+		0x00, // Group 0
+		0x00, // Variation 0
+		0xFD, // Qualifier Fields F: reserved, range spec D reserved
+	}
 )
 
 var objectNoDataHeaders = [][]byte{
@@ -140,6 +162,7 @@ var pointSizeMap = map[string]int{
 	string(DNP3G41V3Q0):    5,
 }
 
+//nolint:exhaustruct // Use defaults, many fields set later
 func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 	frame := dnp3.Frame{
 		DataLink: dnp3.DataLink{
@@ -182,7 +205,8 @@ func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 				//nolint:gosec // G404: not cryptographically relevant, G115: clamped
 				Sequence: uint8(rand.Intn(15)),
 			},
-			FunctionCode:        dnp3.Response,
+			FunctionCode: dnp3.Response,
+			//nolint:exhaustruct // use all unset IIN
 			InternalIndications: dnp3.ApplicationInternalIndications{},
 		}
 	}
@@ -208,9 +232,7 @@ func NewDNP3ResponseFrame() dnp3.Frame {
 func GetObjectDataFromDNP3Bytes(inData []byte) ([][]byte, [][]byte, error) {
 	var headers, data [][]byte
 
-	frame := dnp3.Frame{}
-
-	err := frame.FromBytes(inData)
+	frame, err := dnp3.NewFrameFromBytes(inData)
 	if err != nil {
 		return headers, data, fmt.Errorf("error parsing DNP3 frame from bytes: %w", err)
 	}
@@ -219,7 +241,7 @@ func GetObjectDataFromDNP3Bytes(inData []byte) ([][]byte, [][]byte, error) {
 
 ObjectsLoop:
 	for _, obj := range app.Objects {
-		objData, err := obj.ToBytes()
+		objData, err := obj.SerializeTo()
 		if err != nil {
 			return headers, data, fmt.Errorf("error converting DNP3 object to bytes: %w", err)
 		}
@@ -322,22 +344,24 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 		}
 	}
 
-	appData := dnp3.ApplicationData{}
+	appData := dnp3.NewApplicationData()
 
-	err := appData.FromBytes(result)
+	err := appData.DecodeFromBytes(result)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing application data from bytes: %w", err)
 	}
 
 	incrementDNP3Sequence(frame)
-	frame.Application.SetData(appData)
+	frame.Application.SetData(*appData)
 
-	b, err := frame.ToBytes()
+	buf := gopacket.NewSerializeBuffer()
+
+	err = frame.SerializeTo(buf, gopacket.SerializeOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error converting DNP3 frame to bytes: %w", err)
 	}
 
-	return b, nil
+	return buf.Bytes(), nil
 }
 
 func calculateStartEndIndices(data []byte, pointSize int) (byte, byte, error) {

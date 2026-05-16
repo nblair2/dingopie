@@ -16,29 +16,27 @@ linters:
     - copyloopvar
     - cyclop
     - decorder
-    # - depguard
     - dogsled
     - dupl
     - dupword
     - durationcheck
     - embeddedstructfieldcheck
-    # - err113
     - errcheck
     - errchkjson
     - errname
     - errorlint
     - exhaustive
-    # - exhaustruct
+    - exhaustruct
     - exptostd
     - fatcontext
-    # - forbidigo
+    - forbidigo
     - forcetypeassert
     - funcorder
     - funlen
     - ginkgolinter
     - gocheckcompilerdirectives
     # - gochecknoglobals
-    # - gochecknoinits
+    - gochecknoinits
     - gochecksumtype
     - gocognit
     - goconst
@@ -69,7 +67,7 @@ linters:
     - makezero
     - mirror
     - misspell
-    # - mnd
+    - mnd
     - modernize
     - musttag
     - nakedret
@@ -120,9 +118,46 @@ linters:
   exclusions:
     warn-unused: true
     rules:
+
+      # Do not discourage useful comments
       - linters:
           - godox
         text: Line contains TODO/BUG/FIXME
+
+      # Test files: idiomatic table-driven tests need looser rules
+      - linters:
+          - mnd
+          - exhaustruct
+          - funlen
+          - gocognit
+          - cyclop
+          - dupl
+          - lll
+          - maintidx
+        path: _test\.go
+
+      # Cobra-isms
+      - linters:
+          - exhaustruct
+          - gochecknoglobals
+          - gochecknoinits
+        path: cmd/*
+
+      # DNP3 constants
+      - linters:
+          - mnd
+        path: internal/dnp3.go
+
+      - linters:
+          - exhaustruct
+        text: "gopacket.SerializeOptions is missing fields"
+
+      # TCP/IP constants
+      - linters:
+          - mnd
+        path: internal/inject/tcpIp.go
+
+      # Specific unhandled errors
       - linters:
           - gosec
         text: "G104: Errors unhandled"
@@ -132,15 +167,14 @@ linters:
       - linters:
           - errcheck
         text: \.Close
+      - linters:
+          - errcheck
+        text: fmt\.Fprint
 
   disable:
     - depguard
     - err113
-    - exhaustruct
-    - forbidigo
     - gochecknoglobals
-    - gochecknoinits
-    - mnd
     - noctx
     - varnamelen
 

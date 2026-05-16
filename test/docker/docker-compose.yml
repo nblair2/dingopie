@@ -1,25 +1,42 @@
 services:
 
   outstation:
-    image: ghcr.io/nblair2/opendnp3-demo:latest
+    image: dingopie-test:latest
     container_name: outstation
-    cap_add:
-      - NET_ADMIN
-    stdin_open: true
-    tty: true
     volumes:
       - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
-    command: ["/usr/local/bin/outstation-demo"]
+      - ../results:/usr/local/bin/results:rw
+    cap_add:
+      - NET_ADMIN
+    init: true
+    command: ["outstation-demo", "20000", "2"]
+    stop_grace_period: 1s
+    networks:
+      test:
+        ipv4_address: 192.168.0.10
 
   master:
-    image: ghcr.io/nblair2/opendnp3-demo:latest
+    image: dingopie-test:latest
     container_name: master
-    cap_add:
-      - NET_ADMIN
-    stdin_open: true
-    tty: true
     volumes:
       - ${EXECUTABLE}:/usr/local/bin/dingopie:ro
-    command: ["/usr/local/bin/master-demo", "outstation", "20000"]
+      - ../results:/usr/local/bin/results:rw
+    cap_add:
+      - NET_ADMIN
+    init: true
+    command: ["master-demo", "outstation", "20000", "1"]
+    stop_grace_period: 1s
     depends_on:
       - outstation
+    networks:
+      test:
+        ipv4_address: 192.168.0.5
+
+networks:
+  test:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: dingopie-test
+    ipam:
+      config:
+        - subnet: 192.168.0.0/24

@@ -26,21 +26,22 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
-	"runtime"
 	"slices"
 	"strconv"
-	"strings"
 
-	"github.com/creack/pty"
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/nblair2/go-dnp3/v2/dnp3"
 	"golang.org/x/term"
 )
 
 // ==================================================================
 // COMMON
 // ==================================================================
+
+const (
+	dnp3PointSize       = 4 // DNP3 G30/G41 data point size in bytes
+	dnp3SizeHeaderBytes = 2 // uint16 length prefix in shell DNP3 frames
+)
 
 var (
 	// maxDataLen constricts data in each packet to one DNP3 frame so that we don't split data across frames.
@@ -56,43 +57,6 @@ var (
 	// 'salt' so encryption streams aren't symmetrical.
 	salt = "Three may keep a secret, if two of them are dead."
 )
-
-// shell initiates an interactive shell session over the provided stream.
-func shell(command string, stream dnp3Stream, maxDataLen int) error {
-	if runtime.GOOS == "windows" {
-		return errors.New("shell is not supported on Windows")
-	}
-
-	var c *exec.Cmd
-
-	if strings.HasSuffix(command, "bash") {
-		rcContent := `PS1="dingopie> "`
-		//nolint:gosec //G204 user provided command which they must have permissions to run
-		c = exec.Command(
-			"bash",
-			"-c",
-			fmt.Sprintf("exec %s --rcfile <(echo '%s') -i", command, rcContent),
-		)
-	} else {
-		c = exec.Command(command)
-	}
-
-	ptmx, err := pty.Start(c)
-	if err != nil {
-		return fmt.Errorf("error starting pty: %w", err)
-	}
-	defer ptmx.Close()
-
-	buf := make([]byte, maxDataLen)
-
-	go func() { _, _ = io.Copy(ptmx, stream) }()
-
-	_, _ = io.CopyBuffer(stream, ptmx, buf)
-
-	fmt.Printf(">> Shell session ended\n")
-
-	return nil
-}
 
 // connect attaches to a shell using the provided stream.
 func connect(stream dnp3Stream, maxDataLen int) error {
@@ -176,7 +140,7 @@ func newServerStream(key string, conn net.Conn) dnp3Stream {
 }
 
 func (ds dnp3Stream) Read(data []byte) (int, error) {
-	buf := make([]byte, 4096)
+	buf := make([]byte, internal.TCPReadBufferSize)
 
 	n, err := ds.conn.Read(buf)
 	if errors.Is(err, io.EOF) {
@@ -210,6 +174,7 @@ func (ds dnp3Stream) Read(data []byte) (int, error) {
 	return size, nil
 }
 
+//nolint:funlen // line count inflated by formatter wrapping, not added logic
 func (ds dnp3Stream) Write(data []byte) (int, error) {
 	totalWritten := 0
 
@@ -218,12 +183,12 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 		chunkSize := min(len(data), ds.maxDataLen)
 		chunk := data[:chunkSize]
 
-		sizeBytes := make([]byte, 2)
+		sizeBytes := make([]byte, dnp3SizeHeaderBytes)
 		//nolint:gosec // G115 clamped above to maxDataLen
 		binary.BigEndian.PutUint16(sizeBytes, uint16(chunkSize))
 
 		// Pad to 4 byte boundary, encrypt
-		padded := internal.PadDataToChunkSize(chunk, 4)
+		padded := internal.PadDataToChunkSize(chunk, dnp3PointSize)
 		if len(padded) > ds.maxDataLen {
 			return totalWritten, fmt.Errorf(
 				"after padding data length %d exceeds max data length %d",
@@ -238,7 +203,12 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 		ds.txCipher.XORKeyStream(encData, padded)
 		// If this is a client to server, the points need an extra event status byte
 		if ds.primary {
-			sizeBytes, err = internal.InsertPeriodicBytes(sizeBytes, []byte{0x00}, 2, 2)
+			sizeBytes, err = internal.InsertPeriodicBytes(
+				sizeBytes,
+				[]byte{0x00},
+				dnp3SizeHeaderBytes,
+				dnp3SizeHeaderBytes,
+			)
 			if err != nil {
 				return totalWritten, fmt.Errorf(
 					"error inserting periodic bytes on sizeBytes: %w",
@@ -246,7 +216,12 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 				)
 			}
 
-			encData, err = internal.InsertPeriodicBytes(encData, []byte{0x00}, 4, 4)
+			encData, err = internal.InsertPeriodicBytes(
+				encData,
+				[]byte{0x00},
+				dnp3PointSize,
+				dnp3PointSize,
+			)
 			if err != nil {
 				return totalWritten, fmt.Errorf("error inserting periodic bytes on chunk: %w", err)
 			}
@@ -268,7 +243,6 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 		if err != nil {
 			return totalWritten, fmt.Errorf("error writing data: %w", err)
 		}
-
 		// Update remaining
 		totalWritten += chunkSize
 		data = data[chunkSize:]
@@ -297,12 +271,17 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 
 	// if receiving from client, remove object event status bytes
 	if !ds.primary {
-		sizeBytes, err = internal.RemovePeriodicBytes(sizeBytes, 1, 2, 2)
+		sizeBytes, err = internal.RemovePeriodicBytes(
+			sizeBytes,
+			1,
+			dnp3SizeHeaderBytes,
+			dnp3SizeHeaderBytes,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("error removing periodic bytes from sizeBytes: %w", err)
 		}
 
-		cleanData, err = internal.RemovePeriodicBytes(cleanData, 1, 4, 4)
+		cleanData, err = internal.RemovePeriodicBytes(cleanData, 1, dnp3PointSize, dnp3PointSize)
 		if err != nil {
 			return nil, fmt.Errorf("error removing periodic bytes from data: %w", err)
 		}
@@ -326,34 +305,19 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 // ==================================================================
 
 // ClientConnect - dingopie client direct connect.
-func ClientConnect(ip string, port int, key string) error {
+func ClientConnect(out io.Writer, ip string, port int, key string) error {
 	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
 	}
 	defer conn.Close()
 
-	fmt.Printf(">> Connected to %s:%d\n", ip, port)
-	fmt.Print(internal.Banner)
+	fmt.Fprintf(out, ">> Connected to %s:%d\n", ip, port)
+	fmt.Fprint(out, internal.Banner)
 
 	stream := newClientStream(key, conn)
 
 	return connect(stream, clientMaxDataLen)
-}
-
-// ClientShell - dingopie client direct shell.
-func ClientShell(ip string, port int, key, command string) error {
-	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
-	if err != nil {
-		return fmt.Errorf("error connecting: %w", err)
-	}
-	defer conn.Close()
-
-	fmt.Printf(">> Connected to %s:%d\n", ip, port)
-
-	stream := newClientStream(key, conn)
-
-	return shell(command, stream, clientMaxDataLen)
 }
 
 // ==================================================================
@@ -361,14 +325,14 @@ func ClientShell(ip string, port int, key, command string) error {
 // ==================================================================
 
 // ServerConnect - dingopie server direct connect.
-func ServerConnect(ip string, port int, key string) error {
+func ServerConnect(out io.Writer, ip string, port int, key string) error {
 	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return fmt.Errorf("error starting TCP listener: %w", err)
 	}
 	defer ln.Close()
 
-	fmt.Printf(">> Listening on %s:%d\n", ip, port)
+	fmt.Fprintf(out, ">> Listening on %s:%d\n", ip, port)
 
 	conn, err := ln.Accept()
 	if err != nil {
@@ -376,32 +340,10 @@ func ServerConnect(ip string, port int, key string) error {
 	}
 	defer conn.Close()
 
-	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
-	fmt.Print(internal.Banner)
+	fmt.Fprintf(out, "\tConnection %s\n", conn.RemoteAddr().String())
+	fmt.Fprint(out, internal.Banner)
 
 	stream := newServerStream(key, conn)
 
 	return connect(stream, serverMaxDataLen)
-}
-
-// ServerShell - dingopie server direct shell.
-func ServerShell(ip string, port int, key, command string) error {
-	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
-	if err != nil {
-		return fmt.Errorf("error starting TCP listener: %w", err)
-	}
-	defer ln.Close()
-
-	fmt.Printf(">> Listening on %s:%d\n", ip, port)
-
-	conn, err := ln.Accept()
-	if err != nil {
-		return fmt.Errorf("error accepting connection: %w", err)
-	}
-	defer conn.Close()
-
-	fmt.Printf("\tConnection %s\n", conn.RemoteAddr().String())
-	stream := newServerStream(key, conn)
-
-	return shell(command, stream, serverMaxDataLen)
 }
