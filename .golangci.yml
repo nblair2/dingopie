@@ -118,18 +118,11 @@ linters:
   exclusions:
     warn-unused: true
     rules:
-      # !TODO: Take this out before merging inject
-      - linters:
-          - revive
-          - errcheck
-          - forbidigo
-          - mnd
-        path: internal/inject/inject.go
 
-      # DNP3 constants
+      # Do not discourage useful comments
       - linters:
-          - mnd
-        path: internal/dnp3.go
+          - godox
+        text: Line contains TODO/BUG/FIXME
 
       # Test files: idiomatic table-driven tests need looser rules
       - linters:
@@ -143,17 +136,26 @@ linters:
           - maintidx
         path: _test\.go
 
-      # Do not discourage useful comments
-      - linters:
-          - godox
-        text: Line contains TODO/BUG/FIXME
-
       # Cobra-isms
       - linters:
           - exhaustruct
           - gochecknoglobals
           - gochecknoinits
         path: cmd/*
+
+      # DNP3 constants
+      - linters:
+          - mnd
+        path: internal/dnp3.go
+
+      - linters:
+          - exhaustruct
+        text: "gopacket.SerializeOptions is missing fields"
+
+      # TCP/IP constants
+      - linters:
+          - mnd
+        path: internal/inject/tcpIp.go
 
       # Specific unhandled errors
       - linters:

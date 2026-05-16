@@ -8,14 +8,12 @@ require (
 	github.com/florianl/go-nfqueue v1.3.2
 	github.com/google/go-cmp v0.5.7
 	github.com/google/gopacket v1.1.19
-	github.com/nblair2/go-dnp3 v1.3.0
+	github.com/nblair2/go-dnp3/v2 v2.0.1
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/term v0.42.0
 )
-
-replace github.com/nblair2/go-dnp3 => ../go-dnp3
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

@@ -29,21 +29,18 @@ import (
 	"context"
 	"crypto/cipher"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/coreos/go-iptables/iptables"
 	nfqueue "github.com/florianl/go-nfqueue"
 	"github.com/google/gopacket"
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/nblair2/go-dnp3/v2/dnp3"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -88,14 +85,23 @@ func inject(
 		return fmt.Errorf("error creating firewall rule: %w", err)
 	}
 
-	defer deleteFirewallRule(rule)
+	defer func() {
+		err := deleteFirewallRule(rule)
+		if err != nil {
+			fmt.Fprintf(
+				out,
+				"Error deleting firewall rule: %v\nRun 'iptables -F' to flush all rules\n",
+				err,
+			)
+		}
+	}()
 
 	fmt.Fprintf(out, ">> Intercepting traffic\n")
 
 	pktChan := make(chan forwardInfo, 1)
 
-	go newNFQueueToChan(injectQueue, pktChan)
-	go newChanToFunc(pktChan, fwdFunc)
+	go newNFQueueToChan(out, injectQueue, pktChan)
+	go newChanToFunc(out, pktChan, fwdFunc)
 
 	select {
 	case <-sigChan:
@@ -105,8 +111,8 @@ func inject(
 	return nil
 }
 
-func newNFQueueToChan(que uint16, forward chan forwardInfo) {
-	//nolint: exhaustruct // Use defaults
+func newNFQueueToChan(out io.Writer, que uint16, forward chan forwardInfo) {
+	//nolint:exhaustruct,mnd // Use defaults and maxes
 	config := nfqueue.Config{
 		NfQueue:      que,
 		MaxPacketLen: 0xFFFF,
@@ -135,13 +141,13 @@ func newNFQueueToChan(que uint16, forward chan forwardInfo) {
 
 		err = nf.SetVerdictModPacket(*a.PacketID, nfqueue.NfAccept, resp)
 		if err != nil {
-			fmt.Printf("Error setting verdict: %v\n", err)
+			fmt.Fprintf(out, "Error setting verdict: %v\n", err)
 		}
 
 		return 0
 	}
 
-	errFunc := func(e error) int { return 1 }
+	errFunc := func(_ error) int { return 1 }
 
 	err = nf.RegisterWithErrorFunc(context.Background(), fwdFunc, errFunc)
 	if err != nil {
@@ -152,11 +158,11 @@ func newNFQueueToChan(que uint16, forward chan forwardInfo) {
 	select {}
 }
 
-func newChanToFunc(forward chan forwardInfo, fwdFunc func(*forwardInfo) error) {
+func newChanToFunc(out io.Writer, forward chan forwardInfo, fwdFunc func(*forwardInfo) error) {
 	for fwd := range forward {
 		err := fwdFunc(&fwd)
 		if err != nil {
-			fmt.Printf("Error in forward function: %v\n", err)
+			fmt.Fprintf(out, "Error in forward function: %v\n", err)
 		}
 
 		fwd.responseChan <- fwd.payload
@@ -275,6 +281,7 @@ type recvState struct {
 }
 
 func newRecvState(out io.Writer, key string, result *[]byte, done chan struct{}) *recvState {
+	//nolint:exhaustruct // Use defaults
 	return &recvState{
 		stream: internal.NewCipherStream(key),
 		out:    out,
@@ -336,6 +343,7 @@ func (r *recvState) process(fwd *forwardInfo) error {
 // Exported functions
 // ==================================================================
 
+// ClientInjectReceive - dingopie client inject receive.
 func ClientInjectReceive(
 	out io.Writer,
 	localAddr, remoteAddr string,
@@ -352,6 +360,7 @@ func ClientInjectReceive(
 	return received, err
 }
 
+// ServerInjectSend - dingopie server inject send.
 func ServerInjectSend(
 	out io.Writer,
 	localAddr, remoteAddr string,
@@ -371,6 +380,7 @@ func ServerInjectSend(
 	return inject(out, rule, send.process, done)
 }
 
+// ClientInjectSend - dingopie client inject send.
 func ClientInjectSend(
 	out io.Writer,
 	localAddr, remoteAddr string,
@@ -390,6 +400,7 @@ func ClientInjectSend(
 	return inject(out, rule, send.process, done)
 }
 
+// ServerInjectReceive - dingopie server inject receive.
 func ServerInjectReceive(
 	out io.Writer,
 	localAddr, remoteAddr string,
@@ -407,233 +418,8 @@ func ServerInjectReceive(
 }
 
 // ==================================================================
-// Firewall helpers
-// ==================================================================
-
-// FirewallRule holds the parameters for a single iptables NFQUEUE rule.
-type FirewallRule struct {
-	table       string
-	chain       string
-	number      int
-	que         uint16
-	source      string
-	destination string
-	srcPort     int
-	destPort    int
-}
-
-func newFirewallRule(
-	table, chain string,
-	source, destination string,
-	srcPort, destPort int,
-) *FirewallRule {
-	return &FirewallRule{
-		table:       table,
-		chain:       chain,
-		number:      injectRuleNumber,
-		que:         injectQueue,
-		source:      source,
-		destination: destination,
-		srcPort:     srcPort,
-		destPort:    destPort,
-	}
-}
-
-// newSendRule intercepts packets leaving this host (POSTROUTING).
-func newSendRule(local, remote string, localPort, remotePort int) *FirewallRule {
-	return newFirewallRule("mangle", "POSTROUTING", local, remote, localPort, remotePort)
-}
-
-// newRecvRule intercepts packets arriving at this host (PREROUTING).
-func newRecvRule(local, remote string, localPort, remotePort int) *FirewallRule {
-	return newFirewallRule("mangle", "PREROUTING", remote, local, remotePort, localPort)
-}
-
-// ToArgs converts the rule into iptables argument strings.
-func (r *FirewallRule) ToArgs() []string {
-	var args []string
-
-	if r.source != "" {
-		args = append(args, "--source", r.source)
-	}
-
-	if r.destination != "" {
-		args = append(args, "--destination", r.destination)
-	}
-
-	args = append(args, "--protocol", "tcp")
-
-	if r.srcPort != 0 {
-		args = append(args, "--sport", strconv.Itoa(r.srcPort))
-	}
-
-	if r.destPort != 0 {
-		args = append(args, "--dport", strconv.Itoa(r.destPort))
-	}
-
-	args = append(args, "--jump", "NFQUEUE", "--queue-num", strconv.FormatUint(uint64(r.que), 10))
-
-	return args
-}
-
-func addFirewallRule(rule *FirewallRule) error {
-	ipt, err := iptables.New()
-	if err != nil {
-		return fmt.Errorf("failed to create iptables instance: %w", err)
-	}
-
-	err = ipt.Insert(rule.table, rule.chain, rule.number, rule.ToArgs()...)
-	if err != nil {
-		return fmt.Errorf("failed to insert iptables rule: %w", err)
-	}
-
-	return nil
-}
-
-func deleteFirewallRule(rule *FirewallRule) error {
-	ipt, err := iptables.New()
-	if err != nil {
-		return fmt.Errorf("failed to create iptables instance: %w", err)
-	}
-
-	err = ipt.DeleteIfExists(rule.table, rule.chain, rule.ToArgs()...)
-	if err != nil {
-		return fmt.Errorf("failed to delete iptables rule: %w", err)
-	}
-
-	return nil
-}
-
-// ==================================================================
 // Packet manipulation helpers
 // ==================================================================
-
-// findDNP3InIPPacket parses a raw IPv4 packet and returns the IP header length
-// and TCP header length. Returns error if the packet is not IPv4/TCP or does
-// not carry a DNP3 frame (magic bytes 0x05 0x64).
-func findDNP3InIPPacket(pkt []byte) (int, int, error) {
-	if len(pkt) < 20 {
-		return 0, 0, errors.New("packet too short for IPv4 header")
-	}
-
-	if pkt[0]>>4 != 4 {
-		return 0, 0, errors.New("not an IPv4 packet")
-	}
-
-	if pkt[9] != 6 {
-		return 0, 0, errors.New("not a TCP packet")
-	}
-
-	ipHdrLen := int(pkt[0]&0x0F) * 4
-	if len(pkt) < ipHdrLen+20 {
-		return 0, 0, errors.New("packet too short for TCP header")
-	}
-
-	tcpHdrLen := int(pkt[ipHdrLen+12]>>4) * 4
-	dnp3Start := ipHdrLen + tcpHdrLen
-
-	if len(pkt) < dnp3Start+2 {
-		return 0, 0, errors.New("packet too short for DNP3 magic bytes")
-	}
-
-	if pkt[dnp3Start] != 0x05 || pkt[dnp3Start+1] != 0x64 {
-		return 0, 0, errors.New("DNP3 magic bytes not found")
-	}
-
-	return ipHdrLen, tcpHdrLen, nil
-}
-
-// dnp3FrameEnd returns the index one past the last byte of the first DNP3
-// frame in pkt starting at dnp3Start. Returns -1 if the frame is truncated.
-func dnp3FrameEnd(pkt []byte, dnp3Start int) int {
-	if len(pkt) < dnp3Start+3 {
-		return -1
-	}
-
-	lengthByte := int(pkt[dnp3Start+2])
-	if lengthByte < 5 {
-		return -1
-	}
-
-	payloadLen := lengthByte - 5
-	numBlocks := (payloadLen + 15) / 16
-	end := dnp3Start + 10 + payloadLen + numBlocks*2
-
-	if end > len(pkt) {
-		return -1
-	}
-
-	return end
-}
-
-// calcIPChecksum computes the ones-complement 16-bit checksum over an IP header.
-func calcIPChecksum(hdr []byte) uint16 {
-	var sum uint32
-
-	for i := 0; i+1 < len(hdr); i += 2 {
-		sum += uint32(hdr[i])<<8 | uint32(hdr[i+1])
-	}
-
-	if len(hdr)%2 != 0 {
-		sum += uint32(hdr[len(hdr)-1]) << 8
-	}
-
-	for sum>>16 != 0 {
-		sum = (sum & 0xFFFF) + (sum >> 16)
-	}
-
-	return ^uint16(sum)
-}
-
-// calcTCPChecksum computes the TCP checksum using the IPv4 pseudo-header.
-func calcTCPChecksum(pkt []byte, ipHdrLen int) uint16 {
-	tcpSeg := pkt[ipHdrLen:]
-	tcpLen := uint16(len(tcpSeg)) //nolint:gosec // G115: TCP length bounded by IPv4 max (65535)
-
-	// pseudo-header: src IP, dst IP, zero, proto=6, TCP length
-	pseudo := make([]byte, 12)
-	copy(pseudo[0:4], pkt[12:16]) // source IP
-	copy(pseudo[4:8], pkt[16:20]) // dest IP
-	pseudo[8] = 0
-	pseudo[9] = 6
-	binary.BigEndian.PutUint16(pseudo[10:], tcpLen)
-
-	var sum uint32
-
-	for i := 0; i+1 < len(pseudo); i += 2 {
-		sum += uint32(pseudo[i])<<8 | uint32(pseudo[i+1])
-	}
-
-	for i := 0; i+1 < len(tcpSeg); i += 2 {
-		sum += uint32(tcpSeg[i])<<8 | uint32(tcpSeg[i+1])
-	}
-
-	if len(tcpSeg)%2 != 0 {
-		sum += uint32(tcpSeg[len(tcpSeg)-1]) << 8
-	}
-
-	for sum>>16 != 0 {
-		sum = (sum & 0xFFFF) + (sum >> 16)
-	}
-
-	return ^uint16(sum)
-}
-
-// rebuildChecksums updates the IP total-length, IP checksum, and TCP checksum
-// after the packet has been resized.
-func rebuildChecksums(pkt []byte, ipHdrLen int) {
-	//nolint:gosec // G115: pkt bounded by nfqueue MaxPacketLen (0xFFFF)
-	binary.BigEndian.PutUint16(pkt[2:], uint16(len(pkt)))
-	pkt[10] = 0
-	pkt[11] = 0
-	cs := calcIPChecksum(pkt[:ipHdrLen])
-	binary.BigEndian.PutUint16(pkt[10:], cs)
-
-	pkt[ipHdrLen+16] = 0
-	pkt[ipHdrLen+17] = 0
-	tcs := calcTCPChecksum(pkt, ipHdrLen)
-	binary.BigEndian.PutUint16(pkt[ipHdrLen+16:], tcs)
-}
 
 // injectIntoPacket appends marker+covertData to the DNP3 application payload
 // within the raw IP packet. Returns the modified packet and how many covert
@@ -652,8 +438,13 @@ func injectIntoPacket(pkt, covertData, marker []byte) ([]byte, int, error) {
 		return pkt, 0, nil
 	}
 
-	frame, err := dnp3.NewFrameFromBytes(pkt[dnp3Start:frameEnd])
-	if err != nil || frame.Application == nil {
+	// Use partial-decode (ignore error) so frames with unsupported objects (e.g.
+	// G0/V2) can still be modified. The unsupported bytes land in appData.extra
+	// and are preserved so the wire byte-count stays consistent with TCP.
+	frame := dnp3.NewFrame()
+
+	_ = frame.DecodeFromBytes(pkt[dnp3Start:frameEnd], gopacket.NilDecodeFeedback)
+	if frame.Application == nil {
 		return pkt, 0, nil
 	}
 
@@ -665,14 +456,20 @@ func injectIntoPacket(pkt, covertData, marker []byte) ([]byte, int, error) {
 	toSend := min(len(covertData), available-markerLen)
 
 	appData := frame.Application.GetData()
-	extra := make([]byte, 0, markerLen+toSend)
-	extra = append(extra, marker...)
-	extra = append(extra, covertData[:toSend]...)
-	appData.SetExtra(extra)
+	// Preserve any existing extra bytes (unsupported objects), then append our
+	// marker so extraction can find it with bytes.Index later.
+	existing := appData.GetExtra()
+	newExtra := make([]byte, 0, len(existing)+markerLen+toSend)
+	newExtra = append(newExtra, existing...)
+	newExtra = append(newExtra, marker...)
+	newExtra = append(newExtra, covertData[:toSend]...)
+	appData.SetExtra(newExtra)
 	frame.Application.SetData(appData)
 
 	buf := gopacket.NewSerializeBuffer()
-	if err := frame.SerializeTo(buf, gopacket.SerializeOptions{}); err != nil {
+
+	err = frame.SerializeTo(buf, gopacket.SerializeOptions{})
+	if err != nil {
 		return pkt, 0, fmt.Errorf("SerializeTo: %w", err)
 	}
 
@@ -695,6 +492,23 @@ const (
 	markerEnd
 )
 
+// findMarkerInExtra searches extra bytes for a covert marker and returns its type and index.
+func findMarkerInExtra(extra []byte) (markerType, int) {
+	if idx := bytes.Index(extra, sizeMarker); idx >= 0 {
+		return markerSize, idx
+	}
+
+	if idx := bytes.Index(extra, injectMarker); idx >= 0 {
+		return markerData, idx
+	}
+
+	if idx := bytes.Index(extra, endMarker); idx >= 0 {
+		return markerEnd, idx
+	}
+
+	return markerNone, -1
+}
+
 // extractFromPacket scans the DNP3 application payload for a covert marker.
 // Returns the marker type, bytes after the marker, and a cleaned packet with
 // the marker and everything after it removed. Returns markerNone with the
@@ -712,43 +526,37 @@ func extractFromPacket(pkt []byte) (markerType, []byte, []byte, error) {
 		return markerNone, nil, pkt, nil
 	}
 
-	// DecodeFromBytes errors when it hits G0V0 (our marker), but Application
-	// is still set with the valid objects in Objects and our marker in extra.
+	// DecodeFromBytes errors when it hits G0V0 (our marker), but Application is still set
 	frame := dnp3.NewFrame()
-	_ = frame.DecodeFromBytes(pkt[dnp3Start:frameEnd], gopacket.NilDecodeFeedback)
 
+	_ = frame.DecodeFromBytes(pkt[dnp3Start:frameEnd], gopacket.NilDecodeFeedback)
 	if frame.Application == nil {
 		return markerNone, nil, pkt, nil
 	}
 
 	appData := frame.Application.GetData()
-	extra := appData.GetExtra()
 
+	extra := appData.GetExtra()
 	if len(extra) < markerLen {
 		return markerNone, nil, pkt, nil
 	}
 
-	var kind markerType
-
-	switch {
-	case bytes.Equal(extra[:markerLen], sizeMarker):
-		kind = markerSize
-	case bytes.Equal(extra[:markerLen], injectMarker):
-		kind = markerData
-	case bytes.Equal(extra[:markerLen], endMarker):
-		kind = markerEnd
-	default:
+	kind, markerIdx := findMarkerInExtra(extra)
+	if kind == markerNone {
 		return markerNone, nil, pkt, nil
 	}
 
-	payload := extra[markerLen:]
+	payload := extra[markerIdx+markerLen:]
 
-	// Rebuild a clean frame with the covert data stripped.
-	appData.SetExtra(nil)
+	// Rebuild a clean frame: preserve extra bytes that preceded the marker
+	// (legitimate unsupported objects) and strip our marker and covert payload.
+	appData.SetExtra(extra[:markerIdx])
 	frame.Application.SetData(appData)
 
 	buf := gopacket.NewSerializeBuffer()
-	if err := frame.SerializeTo(buf, gopacket.SerializeOptions{}); err != nil {
+
+	err = frame.SerializeTo(buf, gopacket.SerializeOptions{})
+	if err != nil {
 		return markerNone, nil, pkt, fmt.Errorf("SerializeTo: %w", err)
 	}
 
@@ -779,9 +587,13 @@ func trySendSizePacket(fwd *forwardInfo, encSize []byte) (bool, error) {
 		return false, nil // not enough room, wait for next packet
 	}
 
-	newPkt, _, err := injectIntoPacket(fwd.payload, encSize, sizeMarker)
+	newPkt, consumed, err := injectIntoPacket(fwd.payload, encSize, sizeMarker)
 	if err != nil {
 		return false, fmt.Errorf("injectIntoPacket (size): %w", err)
+	}
+
+	if consumed == 0 {
+		return false, nil // injection failed (e.g. no room), retry next packet
 	}
 
 	fwd.payload = newPkt
@@ -810,6 +622,10 @@ func trySendEndPacket(fwd *forwardInfo) (bool, error) {
 	newPkt, _, err := injectIntoPacket(fwd.payload, nil, endMarker)
 	if err != nil {
 		return false, fmt.Errorf("injectIntoPacket (end): %w", err)
+	}
+
+	if len(newPkt) <= len(fwd.payload) {
+		return false, nil // nothing injected, retry next packet
 	}
 
 	fwd.payload = newPkt

@@ -33,14 +33,6 @@ var clientDirectCmd = &cobra.Command{
 	Short:   "create a new DNP3 channel",
 	Long: internal.Banner + `dingopie client direct acts as a DNP3 master, initiating a connection
 to the server and sending DNP3 Request Frames.`,
-	PersistentPreRun: func(cmd *cobra.Command, _ []string) {
-		if serverIP == "" {
-			cmd.Println("Error: server-ip is required")
-			os.Exit(1)
-		}
-
-		preRun(cmd)
-	},
 }
 
 var clientDirectSendCmd = &cobra.Command{
@@ -130,14 +122,6 @@ var clientDirectShellCmd = &cobra.Command{
 	GroupID: groupAction,
 	Use:     useShell,
 	Short:   "run a pty shell on this device",
-	PreRun: func(cmd *cobra.Command, _ []string) {
-		if serverIP == "" {
-			cmd.Println("Error: server-ip is required")
-			os.Exit(1)
-		}
-
-		preRun(cmd)
-	},
 	Run: func(cmd *cobra.Command, _ []string) {
 		err := shell.ClientShell(cmd.OutOrStdout(), serverIP, serverPort, key, command)
 		if err != nil {

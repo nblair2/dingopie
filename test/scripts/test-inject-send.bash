@@ -39,7 +39,7 @@ esac
 rm -rf results
 mkdir -p results
 
-in_size=$(shuf -i 32-1024 -n 1)
+in_size=$(shuf -i 256-8192 -n 1)
 key_size=$(shuf -i 8-32 -n 1)
 head -c "$in_size" /dev/urandom | base64 > results/in.txt
 head -c "$key_size" /dev/urandom | base64 > results/key.txt

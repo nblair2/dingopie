@@ -4,11 +4,13 @@
 ![Go Version](https://img.shields.io/github/go-mod/go-version/nblair2/dingopie?filename=go.mod&style=flat-square)
 ![License](https://img.shields.io/github/license/nblair2/dingopie?style=flat-square)
 
-> a DNP3 covert channel
+> "The greatest trick the devil ever pulled was convincing the world he didn't exist."
+
+**dingopie is a DNP3 covert channel**
 
 ![dingopie](.media/dingopie.png)
 
-dingopie is a tool for tunneling traffic over DNP3. There are two main functions: transferring files (`send` | `receive`), and establishing an interactive shell (`shell` |`connect`).
+There are two main functions: transferring files (`send` | `receive`), and establishing an interactive shell (`shell` |`connect`).
 
 #### Exfiltrate a file:
 ```bash
@@ -49,7 +51,7 @@ dingopie has three different options: the role, the mode, and the action. Each i
 
 ### Roles
 
-* **`server`** - The server role is designed to act like a DNP3 outstation, and should be placed 'lower' in the purdue model. The server needs to be started before the client.
+* **`server`** - The server role is designed to act like a DNP3 outstation, and should be placed 'lower' in the purdue model.
 
 * **`client`** - The client role is designed to act like a DNP3 master, and should be run 'higher' in the purdue model.
 
@@ -57,11 +59,11 @@ dingopie has three different options: the role, the mode, and the action. Each i
 
 #### `direct`
 
-In `direct` mode, dingopie creates a new DNP3 channel. Data is sent in DNP3 Application Objects. This traffic will be legitimate protocol-conforming DNP3, but is noticeable. It will originate on a port and host that are not already communicating using DNP3, and traffic inspection will likely show unusual usage, both in the amount of data transferred and the DNP3 characteristics. The advantage of direct mode is that it can be configured to run at high speeds, between any two devices.
+In `direct` mode, dingopie creates a new DNP3 channel. Data is sent in DNP3 Application Objects. This traffic will be legitimate protocol-conforming DNP3, but is noticeable. It will originate on a port and host that are not already communicating using DNP3, and traffic inspection will likely show unusual usage, both in the amount of data transferred and the DNP3 characteristics. The advantage of direct mode is that it can be configured to run at high speeds, between any two devices. In direct mode, the server should be started before the client.
 
 #### `inject`
 
-In `inject` mode, dingopie 'rides on top of' an existing DNP3 channel. Data is added to existing DNP3 packets (ostensibly created by a legitimate DNP3 program) as they leave one host, and on the other side this data is removed before allowing the packets to continue on to the legitimate DNP3 program. This will increase the size of packets sent between devices, but will take place over an existing DNP3 connection and is much less likely to be noticed. The disadvantage of filter mode is that its speed is constrained by the channel that it is using.
+In `inject` mode, dingopie 'rides on top of' an existing DNP3 channel. Data is added to existing DNP3 packets (ostensibly created by a legitimate DNP3 program) as they leave one host, and on the other side this data is removed before allowing the packets to continue on to the legitimate DNP3 program. This will increase the size of packets sent between devices, but will take place over an existing DNP3 connection and is much less likely to be noticed. The disadvantage of inject mode is that its speed is constrained by the channel that it is using. In inject mode, the receiver should be started before the sender.
 
 ### Actions
 
@@ -73,7 +75,7 @@ Actions are paired, so that each side of a session needs to run one of the actio
 
 > [!WARNING]
 > **Missing Implementations:**
-> The `inject` mode and the `shell` action both leverage linux features, so they are currently not supported on Windows.
+> The `inject` mode and the `shell` action both leverage linux features, so they are currently not supported on Windows. In addition, the `inject` mode throughput is too slow to support `shell`/`connect`.
 > | Mode, Action | Linux | Winddows |
 > | --- | --- | --- |
 > | `direct send` | :white_check_mark: | :white_check_mark: |
@@ -162,10 +164,10 @@ In inject mode, dingopie is subordinate to the existing legitimate DNP3 channel.
 ```mermaid
 sequenceDiagram
 Title: Inject
-    participant o as outstation
-    participant s as server
-    participant c as client
-    participant m as master
+    participant o as outstation (legitimate DNP3 program)
+    participant s as server (dingopie server)
+    participant c as client (dingopie client)
+    participant m as master (legitimate DNP3 program)
 
     o -->>s: Legitimate Traffic
     s->>c: SendSize (G0V0QFA)

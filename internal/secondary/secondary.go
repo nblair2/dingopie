@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/nblair2/go-dnp3/v2/dnp3"
 )
 
 // ==================================================================

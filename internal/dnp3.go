@@ -7,7 +7,7 @@ import (
 	"slices"
 
 	"github.com/google/gopacket"
-	"github.com/nblair2/go-dnp3/dnp3"
+	"github.com/nblair2/go-dnp3/v2/dnp3"
 )
 
 const (
@@ -109,6 +109,27 @@ var (
 		// Start Index
 		// Stop Index
 		// n * (1 byte flag + 4 bytes of data) TODO check this
+	}
+
+	// DNP3G0V0QFA object header G0, V0, QFA - Invalid object.
+	DNP3G0V0QFA = []byte{
+		0x00, // Group 0
+		0x00, // Variation 0
+		0xFA, // Qualifier Fields F: reserved, range spec A reserved
+	}
+
+	// DNP3G0V0QFC object header G0, V0, QFC - Invalid object.
+	DNP3G0V0QFC = []byte{
+		0x00, // Group 0
+		0x00, // Variation 0
+		0xFC, // Qualifier Fields F: reserved, range spec C reserved
+	}
+
+	// DNP3G0V0QFD object header G0, V0, QFD - Invalid object.
+	DNP3G0V0QFD = []byte{
+		0x00, // Group 0
+		0x00, // Variation 0
+		0xFD, // Qualifier Fields F: reserved, range spec D reserved
 	}
 )
 
@@ -334,7 +355,9 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 	frame.Application.SetData(*appData)
 
 	buf := gopacket.NewSerializeBuffer()
-	if err := frame.SerializeTo(buf, gopacket.SerializeOptions{}); err != nil {
+
+	err = frame.SerializeTo(buf, gopacket.SerializeOptions{})
+	if err != nil {
 		return nil, fmt.Errorf("error converting DNP3 frame to bytes: %w", err)
 	}
 

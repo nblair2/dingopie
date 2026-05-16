@@ -219,7 +219,6 @@ func init() {
 	serverDirectCmd.AddCommand(serverDirectReceiveCmd)
 	serverDirectCmd.AddCommand(serverDirectShellCmd)
 	serverDirectCmd.AddCommand(serverDirectConnectCmd)
-	serverDirectCmd.AddCommand(serverDirectConnectCmd)
 	serverDirectSendCmd.PersistentFlags().
 		StringVarP(&file, "file", "f", "", "file to read data from (default is command line)")
 	serverDirectReceiveCmd.PersistentFlags().

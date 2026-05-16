@@ -54,14 +54,14 @@ setup:
 	sudo apt-get install -y lsof docker.io docker-compose-plugin
 
 fix:
-	codespell -I .codespellignore -w .
+	codespell -w .
 	$$(go env GOPATH)/bin/golangci-lint run ./... --fix
 
 lint:
 	$$(go env GOPATH)/bin/golangci-lint run ./...
 
 spell:
-	codespell -I .codespellignore .
+	codespell .
 
 check: lint spell
 
