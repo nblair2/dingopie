@@ -6,7 +6,7 @@ require (
 	github.com/coreos/go-iptables v0.8.0
 	github.com/creack/pty v1.1.24
 	github.com/florianl/go-nfqueue v1.3.2
-	github.com/google/go-cmp v0.5.7
+	github.com/google/go-cmp v0.7.0
 	github.com/google/gopacket v1.1.19
 	github.com/nblair2/go-dnp3/v2 v2.0.1
 	github.com/schollz/progressbar/v3 v3.19.0
