@@ -24,7 +24,7 @@ jobs:
       - name: Install garble
         run: go install mvdan.cc/garble@${{ env.GARBLE_VERSION }}
       - name: Cache garble build cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/garble
           key: garble-release-${{ env.GARBLE_VERSION }}-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
