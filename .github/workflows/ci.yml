@@ -122,7 +122,7 @@ jobs:
           path: dist/
       - name: Set up Docker Buildx
         if: contains(matrix.test, 'inject')
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Build test docker image
         if: contains(matrix.test, 'inject')
         uses: docker/build-push-action@v6
