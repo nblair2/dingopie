@@ -19,6 +19,7 @@ package shell
 
 import (
 	"bytes"
+	"context"
 	"crypto/cipher"
 	"encoding/binary"
 	"errors"
@@ -30,7 +31,7 @@ import (
 	"strconv"
 
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/v2/dnp3"
+	"github.com/nblair2/go-dnp3/v3/dnp3"
 	"golang.org/x/term"
 )
 
@@ -306,7 +307,12 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 
 // ClientConnect - dingopie client direct connect.
 func ClientConnect(out io.Writer, ip string, port int, key string) error {
-	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	//nolint:exhaustruct_v5 // zero-value Dialer, just need DialContext for noctx
+	conn, err := (&net.Dialer{}).DialContext(
+		context.Background(),
+		"tcp",
+		net.JoinHostPort(ip, strconv.Itoa(port)),
+	)
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
 	}
@@ -326,7 +332,12 @@ func ClientConnect(out io.Writer, ip string, port int, key string) error {
 
 // ServerConnect - dingopie server direct connect.
 func ServerConnect(out io.Writer, ip string, port int, key string) error {
-	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	//nolint:exhaustruct_v5 // zero-value ListenConfig, just need Listen for noctx
+	ln, err := (&net.ListenConfig{}).Listen(
+		context.Background(),
+		"tcp",
+		net.JoinHostPort(ip, strconv.Itoa(port)),
+	)
 	if err != nil {
 		return fmt.Errorf("error starting TCP listener: %w", err)
 	}

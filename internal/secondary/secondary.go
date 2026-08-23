@@ -22,6 +22,7 @@ package secondary
 
 import (
 	"bytes"
+	"context"
 	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
@@ -31,7 +32,7 @@ import (
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/v2/dnp3"
+	"github.com/nblair2/go-dnp3/v3/dnp3"
 )
 
 // ==================================================================
@@ -81,7 +82,8 @@ func ServerSend(out io.Writer, ip string, port int,
 	// Open socket, wait for connection
 	socket := fmt.Sprintf("%s:%d", ip, port)
 
-	ln, err := net.Listen("tcp", socket)
+	//nolint:exhaustruct_v5 // zero-value ListenConfig, just need Listen for noctx
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", socket)
 	if err != nil {
 		return fmt.Errorf("error starting TCP listener: %w", err)
 	}
@@ -195,7 +197,12 @@ func ClientReceive(
 	frame = internal.NewDNP3RequestFrame()
 	rxCipher = internal.NewCipherStream(key)
 
-	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	//nolint:exhaustruct_v5 // zero-value Dialer, just need DialContext for noctx
+	conn, err := (&net.Dialer{}).DialContext(
+		context.Background(),
+		"tcp",
+		net.JoinHostPort(ip, strconv.Itoa(port)),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error connecting: %w", err)
 	}

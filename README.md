@@ -102,7 +102,7 @@ Primary is the term that the DNP3 specification uses for describing connections 
 
 ```mermaid
 sequenceDiagram
-Title: Primary 
+Title: Primary
     participant c as client
     participant s as server
     c-->>s: Connect (ReadClass1230)
@@ -125,7 +125,7 @@ Secondary is the opposite of primary (both in the DNP3 spec and for dingopie). T
 
 ```mermaid
 sequenceDiagram
-Title: Secondary   
+Title: Secondary  
     participant c as client
     participant s as server
     c-->>s: Connect (ReadClass1230)
@@ -146,14 +146,14 @@ The shell sequence is used for bi-directional data streaming between a `client` 
 
 ```mermaid
 sequenceDiagram
-Title: Shell   
+Title: Shell  
     participant c as client
     participant s as server
     Loop bidirectional streaming
         c->>s: SendData (G41V1)
         s->>c: SendData (G30V3)
     end
-``` 
+```
 
 ### Inject Mode
 
@@ -165,7 +165,7 @@ In inject mode, dingopie is subordinate to the existing legitimate DNP3 channel.
 > In inject mode, the TCP Sequence/Acknowledgement numbers are modified to account for the additional data added by dingopie. Dingopie takes care of this for the length of the running session, but once dingopie exits a TCP 'hickup' **will** occur where the stream re-synchronizes. This is unavoidable unless a program is kept running indefinitely.
 
 > [!NOTE]
-> The diagram below shows the inject sequence transferring server --> client. The sequence is the same for client --> server, except dingopie would be filtering on traffic flowing in the opposite direction. 
+> The diagram below shows the inject sequence transferring server --> client. The sequence is the same for client --> server, except dingopie would be filtering on traffic flowing in the opposite direction.
 
 ```mermaid
 sequenceDiagram

@@ -18,10 +18,7 @@ help:
 	@echo
 	@echo "Develop:"
 	@echo "  make setup                Setup development environment"
-	@echo "  make lint                 Run golangci-lint to check for issues"
-	@echo "  make fix                  Run golangci-lint to auto-fix fixable issues"
-	@echo "  make spell                Run codespell to check for spelling errors"
-	@echo "  make check                Run lint and spell checks"
+	@echo "  make lint                 Run all prek hooks (lint, spellcheck, format) on all files"
 	@echo
 	@echo "Build:"
 	@echo "  make clean                Remove built binaries and test files"
@@ -46,24 +43,15 @@ help:
 ## ------------------------- Develop -------------------------------------
 
 setup:
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION)
 	go install github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
 	go install mvdan.cc/garble@$(GARBLE_VERSION)
 	go install github.com/boumenot/gocover-cobertura@$(GOCOVERCOBERTURA_VERSION)
-	pip install codespell==$(CODESPELL_VERSION)
 	sudo apt-get install -y lsof docker.io docker-compose-plugin
-
-fix:
-	codespell -w .
-	$$(go env GOPATH)/bin/golangci-lint run ./... --fix
-
-spell:
-	codespell .
+	curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/download/v$(PREK_VERSION)/prek-installer.sh | sh
+	prek install
 
 lint:
-	$$(go env GOPATH)/bin/golangci-lint run ./...
-
-check: spell lint
+	prek run --all-files
 
 ##  ------------------------- Build  -------------------------------------
 

@@ -26,7 +26,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exhaustruct
+    - exhaustruct_v5
     - exptostd
     - fatcontext
     - forbidigo
@@ -76,7 +76,7 @@ linters:
     - nilnesserr
     - nilnil
     - nlreturn
-    # - noctx
+    - noctx
     - noinlineerr
     - nolintlint
     - nonamedreturns
@@ -127,7 +127,7 @@ linters:
       # Test files: idiomatic table-driven tests need looser rules
       - linters:
           - mnd
-          - exhaustruct
+          - exhaustruct_v5
           - funlen
           - gocognit
           - cyclop
@@ -138,7 +138,7 @@ linters:
 
       # Cobra-isms
       - linters:
-          - exhaustruct
+          - exhaustruct_v5
           - gochecknoglobals
           - gochecknoinits
         path: cmd/*
@@ -149,7 +149,7 @@ linters:
         path: internal/dnp3.go
 
       - linters:
-          - exhaustruct
+          - exhaustruct_v5
         text: "gopacket.SerializeOptions is missing fields"
 
       # TCP/IP constants
@@ -175,7 +175,6 @@ linters:
     - depguard
     - err113
     - gochecknoglobals
-    - noctx
     - varnamelen
 
 formatters:
@@ -186,4 +185,3 @@ formatters:
     - goimports
     - golines
     - swaggo
-      

@@ -37,10 +37,10 @@ import (
 	"syscall"
 	"time"
 
-	nfqueue "github.com/florianl/go-nfqueue"
-	"github.com/google/gopacket"
+	"github.com/florianl/go-nfqueue/v2"
+	"github.com/gopacket/gopacket"
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/v2/dnp3"
+	"github.com/nblair2/go-dnp3/v3/dnp3"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -114,7 +114,7 @@ func inject(
 }
 
 func newNFQueueToChan(out io.Writer, que uint16, forward chan forwardInfo) {
-	//nolint:exhaustruct,mnd // Use defaults and maxes
+	//nolint:exhaustruct_v5,mnd // Use defaults and maxes
 	config := nfqueue.Config{
 		NfQueue:      que,
 		MaxPacketLen: 0xFFFF,
@@ -141,7 +141,11 @@ func newNFQueueToChan(out io.Writer, que uint16, forward chan forwardInfo) {
 
 		resp := <-response
 
-		err = nf.SetVerdictModPacket(*a.PacketID, nfqueue.NfAccept, resp)
+		err = nf.SetVerdictWithOption(
+			*a.PacketID,
+			nfqueue.NfAccept,
+			nfqueue.WithAlteredPacket(resp),
+		)
 		if err != nil {
 			fmt.Fprintf(out, "Error setting verdict: %v\n", err)
 		}
@@ -343,7 +347,7 @@ func newRecvState(
 	result *[]byte,
 	done chan struct{},
 ) *recvState {
-	//nolint:exhaustruct // Use defaults
+	//nolint:exhaustruct_v5 // Use defaults
 	return &recvState{
 		stream:     internal.NewCipherStream(key),
 		out:        out,

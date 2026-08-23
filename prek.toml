@@ -1,0 +1,123 @@
+# Configuration for prek, a git hook framework (https://prek.j178.dev).
+# Run manually with: prek run --all-files
+#:schema https://www.schemastore.org/prek.json
+
+minimum_prek_version = "0.4.11"
+default_install_hook_types = ["pre-commit", "commit-msg"]
+# golangci-lint must be built with a toolchain >= the go directive in go.mod
+default_language_version.golang = "1.27.0"
+
+# Hooks with the same priority run concurrently; fixers modify files and run
+# before lint hooks, which check the already-fixed files.
+[priorities]
+fixers = 0
+lint = 1
+
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+args = ["--markdown-linebreak-ext=md"]
+priority = "fixers"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+priority = "fixers"
+
+[[repos.hooks]]
+id = "mixed-line-ending"
+priority = "fixers"
+
+[[repos.hooks]]
+id = "fix-byte-order-marker"
+priority = "fixers"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-case-conflict"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-executables-have-shebangs"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-shebang-scripts-are-executable"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-symlinks"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-vcs-permalinks"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-yaml"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-toml"
+priority = "lint"
+
+[[repos.hooks]]
+id = "check-json"
+priority = "lint"
+
+[[repos.hooks]]
+id = "no-commit-to-branch"
+# protect main/master and require kebab-case branch names
+args = ["--branch", "main", "--branch", "master", "--pattern", '.*[^\w-].*']
+priority = "lint"
+
+[[repos]]
+repo = "https://github.com/codespell-project/codespell"
+rev = "v2.4.3"
+
+[[repos.hooks]]
+id = "codespell"
+# -w fixes in place; go.sum hashes can false-positive
+args = ["-w", "--skip", "go.sum"]
+priority = "fixers"
+
+# GitHub Actions workflow security linting (https://docs.zizmor.sh/audits/)
+[[repos]]
+repo = "https://github.com/zizmorcore/zizmor-pre-commit"
+rev = "v1.29.0"
+
+[[repos.hooks]]
+id = "zizmor"
+args = ["--no-progress", "--fix"]
+priority = "fixers"
+
+[[repos]]
+repo = "https://github.com/golangci/golangci-lint"
+rev = "v2.13.1"
+
+# -full lints the whole module; the plain golangci-lint hook only reports on
+# changed files, which breaks whole-package linters like unused
+[[repos.hooks]]
+id = "golangci-lint-full"
+priority = "lint"
+
+[[repos.hooks]]
+id = "golangci-lint-config-verify"
+priority = "lint"
+
+[[repos]]
+repo = "https://github.com/compilerla/conventional-pre-commit"
+rev = "v4.4.0"
+
+[[repos.hooks]]
+id = "conventional-pre-commit"
+stages = ["commit-msg"]
+args = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore"]
