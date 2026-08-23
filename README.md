@@ -1,8 +1,8 @@
 # dingopie :wolf: :cake:
 
-![Release](https://img.shields.io/github/v/release/nblair2/dingopie?style=flat-square)
-![Go Version](https://img.shields.io/github/go-mod/go-version/nblair2/dingopie?filename=go.mod&style=flat-square)
-![License](https://img.shields.io/github/license/nblair2/dingopie?style=flat-square)
+[![Release](https://img.shields.io/github/v/release/nblair2/dingopie?style=flat-square)](https://github.com/nblair2/dingopie/releases/latest)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/nblair2/dingopie?filename=go.mod&style=flat-square)](go.mod)
+[![License](https://img.shields.io/github/license/nblair2/dingopie?style=flat-square)](LICENSE.txt)
 
 > "The greatest trick the devil ever pulled was convincing the world he didn't exist."
 
@@ -187,3 +187,4 @@ Title: Inject
     s->>c:   + Disconnect (G0V0QFD)
     c-->>m:  Legitimate Traffic
 ```
+
