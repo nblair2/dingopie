@@ -3,6 +3,7 @@
 package shell
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -20,13 +21,14 @@ func shell(out io.Writer, command string, stream dnp3Stream, maxDataLen int) err
 	if strings.HasSuffix(command, "bash") {
 		rcContent := `PS1="dingopie> "`
 		//nolint:gosec //G204 user provided command which they must have permissions to run
-		c = exec.Command(
+		c = exec.CommandContext(
+			context.Background(),
 			"bash",
 			"-c",
 			fmt.Sprintf("exec %s --rcfile <(echo '%s') -i", command, rcContent),
 		)
 	} else {
-		c = exec.Command(command)
+		c = exec.CommandContext(context.Background(), command)
 	}
 
 	ptmx, err := pty.Start(c)
@@ -48,7 +50,12 @@ func shell(out io.Writer, command string, stream dnp3Stream, maxDataLen int) err
 
 // ClientShell - dingopie client direct shell.
 func ClientShell(out io.Writer, ip string, port int, key, command string) error {
-	conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	//nolint:exhaustruct_v5 // zero-value Dialer, just need DialContext for noctx
+	conn, err := (&net.Dialer{}).DialContext(
+		context.Background(),
+		"tcp",
+		net.JoinHostPort(ip, strconv.Itoa(port)),
+	)
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
 	}
@@ -63,7 +70,12 @@ func ClientShell(out io.Writer, ip string, port int, key, command string) error 
 
 // ServerShell - dingopie server direct shell.
 func ServerShell(out io.Writer, ip string, port int, key, command string) error {
-	ln, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	//nolint:exhaustruct_v5 // zero-value ListenConfig, just need Listen for noctx
+	ln, err := (&net.ListenConfig{}).Listen(
+		context.Background(),
+		"tcp",
+		net.JoinHostPort(ip, strconv.Itoa(port)),
+	)
 	if err != nil {
 		return fmt.Errorf("error starting TCP listener: %w", err)
 	}

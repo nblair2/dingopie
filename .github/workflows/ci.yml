@@ -8,39 +8,40 @@ on:
       - 'go.sum'
       - '.github/workflows/ci.yml'
 
+permissions:
+  contents: read
+
 jobs:
 
-  codespell:
+  prek:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: codespell-project/actions-codespell@v2
-
-  golangci-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Load tool versions
         run: cat .github/versions.env >> "$GITHUB_ENV"
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: golangci/golangci-lint-action@v9
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
         with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          prek-version: ${{ env.PREK_VERSION }}
 
   test-unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Load tool versions
         run: cat .github/versions.env >> "$GITHUB_ENV"
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Install gocover-cobertura
-        run: go install github.com/boumenot/gocover-cobertura@${{ env.GOCOVERCOBERTURA_VERSION }}
+        run: go install github.com/boumenot/gocover-cobertura@${GOCOVERCOBERTURA_VERSION}
       - name: Run unit tests
         run: make test-unit
 
@@ -57,31 +58,33 @@ jobs:
             goarch: arm64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Load tool versions
         run: cat .github/versions.env >> "$GITHUB_ENV"
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache: false
       - name: Install garble
-        run: go install mvdan.cc/garble@${{ env.GARBLE_VERSION }}
+        run: go install mvdan.cc/garble@${GARBLE_VERSION}
       - name: Cache garble build cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/garble
           key: garble-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.GARBLE_VERSION }}-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             garble-${{ matrix.goos }}-${{ matrix.goarch }}-${{ env.GARBLE_VERSION }}-${{ env.GO_VERSION }}-
+          lookup-only: true
       - name: Generate garble seed
         run: |
           SEED=$(openssl rand -base64 8 | tr -d '=')
           echo "GARBLE_SEED=$SEED"
           echo "GARBLE_SEED=$SEED" >> "$GITHUB_ENV"
       - name: Build via GoReleaser
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           version: ${{ env.GORELEASER_VERSION }}
           args: build --snapshot --clean --single-target
@@ -89,7 +92,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
       - name: Upload Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
@@ -114,18 +117,20 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Download Artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist-linux-${{ matrix.goarch }}
           path: dist/
       - name: Set up Docker Buildx
         if: contains(matrix.test, 'inject')
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
       - name: Build test docker image
         if: contains(matrix.test, 'inject')
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: test/docker
           tags: dingopie-test:latest
@@ -149,9 +154,11 @@ jobs:
           - test-windows-direct-send-primary
           - test-windows-direct-send-secondary
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist-windows-amd64
           path: dist/

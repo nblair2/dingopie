@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/v2/dnp3"
+	"github.com/nblair2/go-dnp3/v3/dnp3"
 )
 
 // makeFrame builds a single DNP3 frame from headerDataPairs using a fresh
@@ -53,13 +53,13 @@ func TestSplitDNP3Frames(t *testing.T) {
 		},
 		{
 			name:    "bad start bytes returns error",
-			input:   []byte{0x00, 0x00, 0x10, 0xC4, 0x01, 0x00, 0x00, 0x04, 0xE9, 0x21},
-			wantErr: "invalid DNP3 frame start",
+			input:   []byte{0x00, 0x00, 0x05, 0xC4, 0x01, 0x00, 0x00, 0x04, 0xE9, 0x21},
+			wantErr: "magic bytes",
 		},
 		{
 			name:    "declared length below minimum",
 			input:   []byte{0x05, 0x64, 0x04, 0xC4, 0x01, 0x00, 0x00, 0x04, 0xE9, 0x21},
-			wantErr: "invalid DNP3 frame length",
+			wantErr: "invalid DNP3 length",
 		},
 		{
 			name:    "declared length runs past buffer end",

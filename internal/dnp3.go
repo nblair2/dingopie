@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"slices"
 
-	"github.com/google/gopacket"
-	"github.com/nblair2/go-dnp3/v2/dnp3"
+	"github.com/gopacket/gopacket"
+	"github.com/nblair2/go-dnp3/v3/dnp3"
 )
 
 const (
@@ -162,7 +162,7 @@ var pointSizeMap = map[string]int{
 	string(DNP3G41V3Q0):    5,
 }
 
-//nolint:exhaustruct // Use defaults, many fields set later
+//nolint:exhaustruct_v5 // Use defaults, many fields set later
 func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 	frame := dnp3.Frame{
 		DataLink: dnp3.DataLink{
@@ -206,7 +206,7 @@ func newDNP3Frame(request bool, src, dst uint16) dnp3.Frame {
 				Sequence: uint8(rand.Intn(15)),
 			},
 			FunctionCode: dnp3.Response,
-			//nolint:exhaustruct // use all unset IIN
+			//nolint:exhaustruct_v5 // use all unset IIN
 			InternalIndications: dnp3.ApplicationInternalIndications{},
 		}
 	}
@@ -278,27 +278,18 @@ ObjectsLoop:
 // individual frames, returned as a slice of byte slices.
 // This solves the problem of reading from a socket and getting multiple frames at once.
 func SplitDNP3Frames(data []byte) ([][]byte, error) {
-	var frames [][]byte
+	parsed, leftover, err := dnp3.ParseFrames(data)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing DNP3 frames: %w", err)
+	}
 
-	offset := 0
-	for offset < len(data) {
-		if data[offset] != 0x05 || data[offset+1] != 0x64 {
-			return frames, fmt.Errorf("invalid DNP3 frame start at offset %d", offset)
-		}
+	if len(leftover) > 0 {
+		return nil, fmt.Errorf("incomplete DNP3 frame: %d trailing bytes", len(leftover))
+	}
 
-		length := int(data[offset+2])
-		if length < 5 {
-			return frames, fmt.Errorf("invalid DNP3 frame length %d at offset %d", length, offset)
-		}
-		// add crcs to length.
-		// 5 more bytes in header not accounted for, and then
-		length = 5 + length + 2*((length+10)/16)
-		if offset+length > len(data) {
-			return frames, fmt.Errorf("incomplete DNP3 frame at offset %d", offset)
-		}
-
-		frames = append(frames, data[offset:offset+length])
-		offset += length
+	frames := make([][]byte, len(parsed))
+	for i, frame := range parsed {
+		frames[i] = frame.LayerContents()
 	}
 
 	return frames, nil
