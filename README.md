@@ -187,4 +187,3 @@ Title: Inject
     s->>c:   + Disconnect (G0V0QFD)
     c-->>m:  Legitimate Traffic
 ```
-
