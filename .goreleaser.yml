@@ -13,7 +13,7 @@ builds:
       # go-packet   (takes too long)
       # go-cmp      (only used in tests)
       # cobra,pflag (uses reflection for commands)
-      - GOGARBLE=github.com/coreos/go-iptables,github.com/creack/pty,github.com/florianl/go-nfqueue/v2,github.com/nblair2/go-dnp3/v4,github.com/schollz/progressbar/v3,golang.org/x/term
+      - GOGARBLE=github.com/coreos/go-iptables,github.com/creack/pty,github.com/florianl/go-nfqueue/v2,github.com/nblair2/dingopie,github.com/nblair2/go-dnp3/v4,github.com/schollz/progressbar/v3,golang.org/x/term
     # Trick goreleaser into using garble as the build tool
     tool: garble
     command: "-literals"
@@ -24,6 +24,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
+      - -X github.com/nblair2/dingopie/cmd.version={{.Version}}
+      - -X github.com/nblair2/dingopie/cmd.commit={{.Commit}}
+      - -X github.com/nblair2/dingopie/cmd.date={{.Date}}
     goos:
       - linux
       - windows
