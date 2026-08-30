@@ -8,7 +8,7 @@ require (
 	github.com/florianl/go-nfqueue/v2 v2.1.0
 	github.com/google/go-cmp v0.7.0
 	github.com/gopacket/gopacket v1.7.1
-	github.com/nblair2/go-dnp3/v3 v3.0.0
+	github.com/nblair2/go-dnp3/v4 v4.0.0
 	github.com/schollz/progressbar/v3 v3.19.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

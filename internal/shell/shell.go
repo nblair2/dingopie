@@ -31,7 +31,7 @@ import (
 	"strconv"
 
 	"github.com/nblair2/dingopie/internal"
-	"github.com/nblair2/go-dnp3/v3/dnp3"
+	"github.com/nblair2/go-dnp3/v4/dnp3"
 	"golang.org/x/term"
 )
 

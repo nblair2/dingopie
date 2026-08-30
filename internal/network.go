@@ -7,7 +7,7 @@ import (
 	"net"
 	"slices"
 
-	"github.com/nblair2/go-dnp3/v3/dnp3"
+	"github.com/nblair2/go-dnp3/v4/dnp3"
 )
 
 // TCPReadBufferSize is the buffer length used when reading from a TCP connection.
