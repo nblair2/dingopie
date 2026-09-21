@@ -1,10 +1,12 @@
 package internal_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/gopacket/gopacket"
 	"github.com/nblair2/dingopie/internal"
 	"github.com/nblair2/go-dnp3/v4/dnp3"
 )
@@ -188,21 +190,24 @@ func TestMakeDNP3Bytes_Errors(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name        string
-		headerPairs [][]byte
-		wantErr     string
+		name         string
+		headerPairs  [][]byte
+		wantErr      string
+		wantSentinel error
 	}{
 		{
-			name:        "odd number of arguments",
-			headerPairs: [][]byte{internal.DNP3ReadClass1},
-			wantErr:     "must be in pairs",
+			name:         "odd number of arguments",
+			headerPairs:  [][]byte{internal.DNP3ReadClass1},
+			wantErr:      "must be in pairs",
+			wantSentinel: internal.ErrOddHeaderDataPairs,
 		},
 		{
 			name: "unknown header",
 			headerPairs: [][]byte{
 				{0xFF, 0xFF, 0x00}, nil,
 			},
-			wantErr: "unknown object header",
+			wantErr:      "unknown object header",
+			wantSentinel: dnp3.ErrUnsupportedObject,
 		},
 		{
 			name: "data length not a multiple of point size",
@@ -210,14 +215,16 @@ func TestMakeDNP3Bytes_Errors(t *testing.T) {
 				// DNP3G30V3Q0 has a 4-byte point size; 3 bytes is invalid.
 				internal.DNP3G30V3Q0, {0x01, 0x02, 0x03},
 			},
-			wantErr: "not padded to multiple of",
+			wantErr:      "not a multiple of",
+			wantSentinel: internal.ErrDataNotPadded,
 		},
 		{
 			name: "data provided for no-data header",
 			headerPairs: [][]byte{
 				internal.DNP3ReadClass1, {0x01, 0x02},
 			},
-			wantErr: "signal that does not take data",
+			wantErr:      "signal that does not take data",
+			wantSentinel: internal.ErrUnexpectedData,
 		},
 	}
 
@@ -235,7 +242,36 @@ func TestMakeDNP3Bytes_Errors(t *testing.T) {
 			if !strings.Contains(err.Error(), tc.wantErr) {
 				t.Errorf("error %q does not contain %q", err.Error(), tc.wantErr)
 			}
+
+			if !errors.Is(err, tc.wantSentinel) {
+				t.Errorf("errors.Is(err, %v) = false, err: %v", tc.wantSentinel, err)
+			}
 		})
+	}
+}
+
+func TestMakeDNP3Bytes_TooManyObjects(t *testing.T) {
+	t.Parallel()
+
+	frame := internal.NewDNP3RequestFrame()
+
+	// DNP3G30V4Q0 has a 2-byte point size; 256 points (512 bytes) exceeds the 255 object max.
+	data := make([]byte, 512)
+
+	_, err := internal.MakeDNP3Bytes(&frame, internal.DNP3G30V4Q0, data)
+	if !errors.Is(err, internal.ErrTooManyObjects) {
+		t.Errorf("errors.Is(err, internal.ErrTooManyObjects) = false, err: %v", err)
+	}
+}
+
+func TestSplitDNP3Frames_IncompleteFrame(t *testing.T) {
+	t.Parallel()
+
+	singleFrame := makeFrame(t, internal.DNP3ReadClass1, nil)
+
+	_, err := internal.SplitDNP3Frames(singleFrame[:len(singleFrame)-3])
+	if !errors.Is(err, internal.ErrIncompleteFrame) {
+		t.Errorf("errors.Is(err, internal.ErrIncompleteFrame) = false, err: %v", err)
 	}
 }
 
@@ -322,6 +358,107 @@ func TestMakeDNP3Bytes_RoundTrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSentinelErrors_UpstreamPassthrough verifies that errors originating in the go-dnp3
+// library remain matchable with errors.Is/errors.As after dingopie wraps them with %w.
+func TestSentinelErrors_UpstreamPassthrough(t *testing.T) {
+	t.Parallel()
+
+	t.Run("SplitDNP3Frames surfaces dnp3.ErrInvalidLength", func(t *testing.T) {
+		t.Parallel()
+
+		// declared length byte (4) is below the minimum allowed.
+		_, err := internal.SplitDNP3Frames(
+			[]byte{0x05, 0x64, 0x04, 0xC4, 0x01, 0x00, 0x00, 0x04, 0xE9, 0x21},
+		)
+		if !errors.Is(err, dnp3.ErrInvalidLength) {
+			t.Errorf("errors.Is(err, dnp3.ErrInvalidLength) = false, err: %v", err)
+		}
+	})
+
+	t.Run("GetObjectDataFromDNP3Bytes surfaces dnp3.ErrInsufficientData", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := internal.GetObjectDataFromDNP3Bytes([]byte{0x05, 0x64})
+		if !errors.Is(err, dnp3.ErrInsufficientData) {
+			t.Errorf("errors.Is(err, dnp3.ErrInsufficientData) = false, err: %v", err)
+		}
+	})
+
+	t.Run(
+		"GetObjectDataFromDNP3Bytes surfaces dnp3.ErrUnsupportedObject for unknown headers",
+		func(t *testing.T) {
+			t.Parallel()
+
+			// Group 1 Variation 2 (Binary Input with status) is decodable by the go-dnp3
+			// library, but is not one of dingopie's recognized object headers.
+			frame := internal.NewDNP3RequestFrame()
+
+			appData := dnp3.NewApplicationData()
+
+			err := appData.DecodeFromBytes([]byte{0x01, 0x02, 0x00, 0x00, 0x00, 0x81})
+			if err != nil {
+				t.Fatalf("appData.DecodeFromBytes: %v", err)
+			}
+
+			frame.Application.SetData(*appData)
+
+			buf := gopacket.NewSerializeBuffer()
+
+			err = frame.SerializeTo(buf, gopacket.SerializeOptions{})
+			if err != nil {
+				t.Fatalf("frame.SerializeTo: %v", err)
+			}
+
+			_, _, err = internal.GetObjectDataFromDNP3Bytes(buf.Bytes())
+			if !errors.Is(err, dnp3.ErrUnsupportedObject) {
+				t.Errorf("errors.Is(err, dnp3.ErrUnsupportedObject) = false, err: %v", err)
+			}
+		},
+	)
+
+	t.Run(
+		"MakeDNP3Bytes surfaces dnp3.ErrUnsupportedObject for unknown headers",
+		func(t *testing.T) {
+			t.Parallel()
+
+			frame := internal.NewDNP3RequestFrame()
+
+			_, err := internal.MakeDNP3Bytes(&frame, []byte{0xFF, 0xFF, 0x00}, nil)
+			if !errors.Is(err, dnp3.ErrUnsupportedObject) {
+				t.Errorf("errors.Is(err, dnp3.ErrUnsupportedObject) = false, err: %v", err)
+			}
+		},
+	)
+}
+
+// TestSentinelErrors_Internal verifies dingopie's own sentinel errors are matchable with
+// errors.Is after being returned/wrapped from their respective functions.
+func TestSentinelErrors_Internal(t *testing.T) {
+	t.Parallel()
+
+	t.Run("MakeDNP3Bytes odd header/data pairs", func(t *testing.T) {
+		t.Parallel()
+
+		frame := internal.NewDNP3RequestFrame()
+
+		_, err := internal.MakeDNP3Bytes(&frame, internal.DNP3ReadClass1)
+		if !errors.Is(err, internal.ErrOddHeaderDataPairs) {
+			t.Errorf("errors.Is(err, internal.ErrOddHeaderDataPairs) = false, err: %v", err)
+		}
+	})
+
+	t.Run("MakeDNP3Bytes data for no-data header", func(t *testing.T) {
+		t.Parallel()
+
+		frame := internal.NewDNP3RequestFrame()
+
+		_, err := internal.MakeDNP3Bytes(&frame, internal.DNP3ReadClass1, []byte{0x01, 0x02})
+		if !errors.Is(err, internal.ErrUnexpectedData) {
+			t.Errorf("errors.Is(err, internal.ErrUnexpectedData) = false, err: %v", err)
+		}
+	})
 }
 
 func TestNewDNP3RequestFrame(t *testing.T) {

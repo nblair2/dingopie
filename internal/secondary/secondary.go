@@ -25,6 +25,7 @@ import (
 	"context"
 	"crypto/cipher"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -34,6 +35,9 @@ import (
 	"github.com/nblair2/dingopie/internal"
 	"github.com/nblair2/go-dnp3/v4/dnp3"
 )
+
+// ErrUnexpectedSizeLength indicates the received size handshake data was not the expected number of bytes.
+var ErrUnexpectedSizeLength = errors.New("unexpected size data length")
 
 // ==================================================================
 // COMMON
@@ -243,7 +247,7 @@ func clientReceiveProcess(out io.Writer, wait time.Duration) recvResult {
 
 	recvData := bytes.Join(recvDataSlice, nil)
 	if len(recvData) != sizePrefixBytes {
-		return recvResult{data, fmt.Errorf("unexpected size data length: %d", len(recvData))}
+		return recvResult{data, fmt.Errorf("%w: %d", ErrUnexpectedSizeLength, len(recvData))}
 	}
 
 	decSize := make([]byte, len(recvData))

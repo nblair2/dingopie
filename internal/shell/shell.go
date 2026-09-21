@@ -44,6 +44,15 @@ const (
 	dnp3SizeHeaderBytes = 2 // uint16 length prefix in shell DNP3 frames
 )
 
+// ErrInvalidResponse indicates a received DNP3 frame did not contain the expected object headers for this stream.
+var ErrInvalidResponse = errors.New("invalid DNP3 response received")
+
+// ErrBufferTooSmall indicates the caller-provided read buffer cannot hold the decoded data.
+var ErrBufferTooSmall = errors.New("buffer too small")
+
+// ErrDataTooLarge indicates data (padded or received) exceeds the maximum size supported by a single DNP3 frame.
+var ErrDataTooLarge = errors.New("data length exceeds max data length")
+
 var (
 	// maxDataLen constricts data in each packet to one DNP3 frame so that we don't split data across frames.
 	serverMaxDataLen = 232 // 256 + 5 'free' DL bytes - 'overhead' (DL + T + A + our length object + data header)
@@ -165,7 +174,7 @@ func (ds dnp3Stream) Read(data []byte) (int, error) {
 
 		fs := len(fd)
 		if size+fs > len(data) {
-			return size, fmt.Errorf("buffer too small: have %d, need %d", len(data), size+fs)
+			return size, fmt.Errorf("%w: have %d, need %d", ErrBufferTooSmall, len(data), size+fs)
 		}
 
 		copy(data[size:size+fs], fd)
@@ -192,7 +201,8 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 		padded := internal.PadDataToChunkSize(chunk, dnp3PointSize)
 		if len(padded) > ds.maxDataLen {
 			return totalWritten, fmt.Errorf(
-				"after padding data length %d exceeds max data length %d",
+				"%w: after padding data length %d exceeds max data length %d",
+				ErrDataTooLarge,
 				len(padded),
 				ds.maxDataLen,
 			)
@@ -264,7 +274,7 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing DNP3 response: %w", err)
 	} else if !slices.Equal(ds.rxSendSize, rxHeader[0]) && !slices.Equal(ds.rxSendData, rxHeader[1]) {
-		return nil, errors.New("invalid DNP3 response received")
+		return nil, ErrInvalidResponse
 	}
 
 	sizeBytes := rxData[0]
@@ -291,7 +301,12 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 	// Get size
 	size := int(binary.BigEndian.Uint16(sizeBytes))
 	if size > serverMaxDataLen {
-		return nil, fmt.Errorf("data length %d exceeds max of %d", size, serverMaxDataLen)
+		return nil, fmt.Errorf(
+			"%w: received data length %d exceeds max of %d",
+			ErrDataTooLarge,
+			size,
+			serverMaxDataLen,
+		)
 	}
 
 	// Decrypt

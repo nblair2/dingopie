@@ -7,24 +7,39 @@ import (
 	"errors"
 )
 
+var (
+	// ErrPacketTooShortIPv4Header indicates a packet is too short to contain an IPv4 header.
+	ErrPacketTooShortIPv4Header = errors.New("packet too short for IPv4 header")
+	// ErrNotIPv4 indicates a packet's IP version field is not 4.
+	ErrNotIPv4 = errors.New("not an IPv4 packet")
+	// ErrNotTCP indicates a packet's IP protocol field is not TCP (6).
+	ErrNotTCP = errors.New("not a TCP packet")
+	// ErrPacketTooShortTCPHeader indicates a packet is too short to contain a TCP header.
+	ErrPacketTooShortTCPHeader = errors.New("packet too short for TCP header")
+	// ErrPacketTooShortDNP3Magic indicates a packet is too short to contain the DNP3 magic bytes.
+	ErrPacketTooShortDNP3Magic = errors.New("packet too short for DNP3 magic bytes")
+	// ErrNoDNP3Magic indicates a packet's payload does not begin with the DNP3 magic bytes (0x05 0x64).
+	ErrNoDNP3Magic = errors.New("DNP3 magic bytes not found")
+)
+
 // findIPv4TCPHeader returns the IP header length for a raw IPv4/TCP packet,
 // without checking for DNP3. Used for SEQ/ACK field adjustments on all packets.
 func findIPv4TCPHeader(pkt []byte) (int, error) {
 	if len(pkt) < 20 {
-		return 0, errors.New("packet too short for IPv4 header")
+		return 0, ErrPacketTooShortIPv4Header
 	}
 
 	if pkt[0]>>4 != 4 {
-		return 0, errors.New("not an IPv4 packet")
+		return 0, ErrNotIPv4
 	}
 
 	if pkt[9] != 6 {
-		return 0, errors.New("not a TCP packet")
+		return 0, ErrNotTCP
 	}
 
 	ipHdrLen := int(pkt[0]&0x0F) * 4
 	if len(pkt) < ipHdrLen+20 {
-		return 0, errors.New("packet too short for TCP header")
+		return 0, ErrPacketTooShortTCPHeader
 	}
 
 	return ipHdrLen, nil
@@ -43,11 +58,11 @@ func findDNP3InIPPacket(pkt []byte) (int, int, error) {
 	dnp3Start := ipHdrLen + tcpHdrLen
 
 	if len(pkt) < dnp3Start+2 {
-		return 0, 0, errors.New("packet too short for DNP3 magic bytes")
+		return 0, 0, ErrPacketTooShortDNP3Magic
 	}
 
 	if pkt[dnp3Start] != 0x05 || pkt[dnp3Start+1] != 0x64 {
-		return 0, 0, errors.New("DNP3 magic bytes not found")
+		return 0, 0, ErrNoDNP3Magic
 	}
 
 	return ipHdrLen, tcpHdrLen, nil

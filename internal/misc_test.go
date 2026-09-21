@@ -2,6 +2,7 @@ package internal_test
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -108,13 +109,14 @@ func TestInsertPeriodicBytes(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name      string
-		source    []byte
-		insertion []byte
-		offset    int
-		period    int
-		want      []byte
-		wantErr   string
+		name         string
+		source       []byte
+		insertion    []byte
+		offset       int
+		period       int
+		want         []byte
+		wantErr      string
+		wantSentinel error
 	}{
 		{
 			name:      "godoc example for insert",
@@ -150,12 +152,13 @@ func TestInsertPeriodicBytes(t *testing.T) {
 			want:      []byte{0x1, 0x2, 0x3, 0x4, 0xAA},
 		},
 		{
-			name:      "period not dividing remaining source returns error",
-			source:    []byte{0x1, 0x2, 0x3, 0x4, 0x5},
-			insertion: []byte{0xA, 0xB},
-			offset:    2,
-			period:    2,
-			wantErr:   "multiple of period",
+			name:         "period not dividing remaining source returns error",
+			source:       []byte{0x1, 0x2, 0x3, 0x4, 0x5},
+			insertion:    []byte{0xA, 0xB},
+			offset:       2,
+			period:       2,
+			wantErr:      "multiple of period",
+			wantSentinel: internal.ErrPeriodMisaligned,
 		},
 		{
 			name:      "empty insertion is a no-op",
@@ -183,6 +186,10 @@ func TestInsertPeriodicBytes(t *testing.T) {
 					t.Errorf("error %q does not contain %q", err.Error(), tc.wantErr)
 				}
 
+				if tc.wantSentinel != nil && !errors.Is(err, tc.wantSentinel) {
+					t.Errorf("errors.Is(err, %v) = false, err: %v", tc.wantSentinel, err)
+				}
+
 				return
 			}
 
@@ -201,13 +208,14 @@ func TestRemovePeriodicBytes(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name      string
-		source    []byte
-		insertLen int
-		offset    int
-		period    int
-		want      []byte
-		wantErr   string
+		name         string
+		source       []byte
+		insertLen    int
+		offset       int
+		period       int
+		want         []byte
+		wantErr      string
+		wantSentinel error
 	}{
 		{
 			name: "godoc example for remove",
@@ -231,20 +239,22 @@ func TestRemovePeriodicBytes(t *testing.T) {
 			want:      []byte{0x1, 0x2, 0x3, 0x4},
 		},
 		{
-			name:      "offset greater than source length returns error",
-			source:    []byte{0x1, 0x2},
-			insertLen: 1,
-			offset:    5,
-			period:    2,
-			wantErr:   "is larger than source length",
+			name:         "offset greater than source length returns error",
+			source:       []byte{0x1, 0x2},
+			insertLen:    1,
+			offset:       5,
+			period:       2,
+			wantErr:      "is larger than source length",
+			wantSentinel: internal.ErrOffsetExceedsSource,
 		},
 		{
-			name:      "incomplete trailing insertion returns error",
-			source:    []byte{0x1, 0x2, 0xA},
-			insertLen: 2,
-			offset:    2,
-			period:    2,
-			wantErr:   "incomplete insertion sequence",
+			name:         "incomplete trailing insertion returns error",
+			source:       []byte{0x1, 0x2, 0xA},
+			insertLen:    2,
+			offset:       2,
+			period:       2,
+			wantErr:      "incomplete insertion sequence",
+			wantSentinel: internal.ErrIncompleteInsertion,
 		},
 	}
 
@@ -262,6 +272,10 @@ func TestRemovePeriodicBytes(t *testing.T) {
 
 				if !strings.Contains(err.Error(), tc.wantErr) {
 					t.Errorf("error %q does not contain %q", err.Error(), tc.wantErr)
+				}
+
+				if tc.wantSentinel != nil && !errors.Is(err, tc.wantSentinel) {
+					t.Errorf("errors.Is(err, %v) = false, err: %v", tc.wantSentinel, err)
 				}
 
 				return
