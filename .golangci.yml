@@ -21,6 +21,7 @@ linters:
     - dupword
     - durationcheck
     - embeddedstructfieldcheck
+    - err113
     - errcheck
     - errchkjson
     - errname
@@ -134,6 +135,7 @@ linters:
           - dupl
           - lll
           - maintidx
+          - testpackage
         path: _test\.go
 
       # Cobra-isms
@@ -173,7 +175,6 @@ linters:
 
   disable:
     - depguard
-    - err113
     - gochecknoglobals
     - varnamelen
 

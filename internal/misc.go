@@ -16,6 +16,16 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
+var (
+	// ErrDataTooLarge indicates data exceeds the maximum length representable in a uint32.
+	ErrDataTooLarge = errors.New("data length exceeds maximum of 4,294,967,295 bytes")
+	// ErrOffsetExceedsSource indicates a requested offset is larger than the source buffer.
+	ErrOffsetExceedsSource = errors.New("offset is larger than source length")
+	// ErrIncompleteInsertion indicates a source buffer ends mid-way through an expected
+	// periodic insertion sequence.
+	ErrIncompleteInsertion = errors.New("source ends with incomplete insertion sequence")
+)
+
 // ==================================================================
 // "CRYPTO"
 // ==================================================================
@@ -87,7 +97,8 @@ func NewDataSequence(key string, data []byte, pointsLow, pointsHigh int) (DataSe
 	// cast to uint64 to check for overflow before continuing
 	if uint64(len(data)) > math.MaxUint32 {
 		return DataSequence{}, fmt.Errorf(
-			"data length %d exceeds maximum of 4,294,967,295 bytes",
+			"%w: got %d bytes",
+			ErrDataTooLarge,
 			len(data),
 		)
 	}
@@ -142,12 +153,15 @@ func PadDataToChunkSize(data []byte, chunkSize int) []byte {
 	return append(data, NewRandomBytes(padLen)...)
 }
 
+// ErrPeriodMisaligned indicates the source length minus offset is not evenly divisible by period.
+var ErrPeriodMisaligned = errors.New("source length minus offset must be multiple of period")
+
 // InsertPeriodicBytes inserts the a slice into the source starting at offset and repeating every period bytes.
 // For example: InsertPeriodicBytes([]byte{0x1,0x2,0x3,0x4,0x5,0x6}, []byte{0xA, 0xB}, 2, 2)
 // Results in:  []byte{0x1,0x2,0xA,0xB,0x3,0x4,0xA,0xB,0x5,0x6,0xA,0xB}.
 func InsertPeriodicBytes(source, insertion []byte, offset, period int) ([]byte, error) {
 	if (len(source)-offset)%period != 0 {
-		return nil, errors.New("source length minus offset must be multiple of period")
+		return nil, ErrPeriodMisaligned
 	}
 
 	var result []byte
@@ -169,7 +183,12 @@ func InsertPeriodicBytes(source, insertion []byte, offset, period int) ([]byte, 
 // Results in:  []byte{0x1,0x2,0x3,0x4,0x5,0x6}.
 func RemovePeriodicBytes(source []byte, insertLen, offset, period int) ([]byte, error) {
 	if offset > len(source) {
-		return nil, fmt.Errorf("offset %d is larger than source length %d", offset, len(source))
+		return nil, fmt.Errorf(
+			"%w: offset %d, source length %d",
+			ErrOffsetExceedsSource,
+			offset,
+			len(source),
+		)
 	}
 
 	result := make([]byte, 0, len(source))
@@ -179,7 +198,7 @@ func RemovePeriodicBytes(source []byte, insertLen, offset, period int) ([]byte, 
 
 	for i := offset; i < len(source); {
 		if i+insertLen > len(source) {
-			return nil, fmt.Errorf("source ends with incomplete insertion sequence at index %d", i)
+			return nil, fmt.Errorf("%w: at index %d", ErrIncompleteInsertion, i)
 		}
 
 		i += insertLen

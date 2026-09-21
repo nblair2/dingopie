@@ -13,6 +13,20 @@ import (
 // TCPReadBufferSize is the buffer length used when reading from a TCP connection.
 const TCPReadBufferSize = 4096
 
+var (
+	// ErrConnectionClosed indicates the remote host closed the connection (wraps io.EOF).
+	ErrConnectionClosed = fmt.Errorf("connection closed by remote host: %w", io.EOF)
+	// ErrHeaderDataMismatch indicates a mismatched number of DNP3 object headers and data
+	// slices were provided/received.
+	ErrHeaderDataMismatch = errors.New("headers and data length mismatch")
+	// ErrUnexpectedHeaderCount indicates a received DNP3 message did not contain the
+	// expected number of object headers.
+	ErrUnexpectedHeaderCount = errors.New("unexpected number of expected headers")
+	// ErrUnexpectedSignal indicates a received DNP3 object header did not match the header
+	// expected at that position.
+	ErrUnexpectedSignal = errors.New("unexpected signal received")
+)
+
 // ClientHandleConn manages a client (DNP3 master) connection, in pairs of write/read.
 func ClientHandleConn(conn net.Conn, write <-chan []byte, read chan<- []byte) error {
 	for {
@@ -25,7 +39,7 @@ func ClientHandleConn(conn net.Conn, write <-chan []byte, read chan<- []byte) er
 
 		n, err := conn.Read(buf)
 		if errors.Is(err, io.EOF) {
-			return errors.New("connection closed by remote host")
+			return ErrConnectionClosed
 		} else if err != nil {
 			return fmt.Errorf("error reading from connection: %w", err)
 		}
@@ -68,7 +82,7 @@ func SendMessage(frame *dnp3.Frame, headers, data [][]byte, sendChan chan<- []by
 	if data == nil {
 		data = make([][]byte, len(headers))
 	} else if len(headers) != len(data) {
-		return errors.New("headers and data length mismatch")
+		return ErrHeaderDataMismatch
 	}
 
 	sendPairs := make([][]byte, 0, len(headers)+len(data))
@@ -96,13 +110,15 @@ func ReceiveAndValidate(recvChan <-chan []byte, expectedHeaders [][]byte) ([][]b
 		return nil, fmt.Errorf("error getting signal from DNP3 bytes: %w", err)
 	case len(headers) != len(data):
 		return nil, fmt.Errorf(
-			"received headers and data lengths do not match: %d headers, %d data",
+			"%w: %d headers, %d data",
+			ErrHeaderDataMismatch,
 			len(headers),
 			len(data),
 		)
 	case len(expectedHeaders) != len(headers):
 		return nil, fmt.Errorf(
-			"unexpected number of expected headers: %d, received %d",
+			"%w: expected %d, received %d",
+			ErrUnexpectedHeaderCount,
 			len(expectedHeaders),
 			len(headers),
 		)
@@ -111,7 +127,8 @@ func ReceiveAndValidate(recvChan <-chan []byte, expectedHeaders [][]byte) ([][]b
 	for i, expHdr := range expectedHeaders {
 		if !slices.Equal(expHdr, headers[i]) {
 			return nil, fmt.Errorf(
-				"unexpected signal received %v, expected %v",
+				"%w %v, expected %v",
+				ErrUnexpectedSignal,
 				headers[i],
 				expHdr,
 			)

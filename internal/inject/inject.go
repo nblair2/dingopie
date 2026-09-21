@@ -29,6 +29,7 @@ import (
 	"context"
 	"crypto/cipher"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -58,6 +59,14 @@ var (
 	sizeMarker   = []byte{0x00, 0x00, 0xFA}
 	injectMarker = []byte{0x00, 0x00, 0xFC}
 	endMarker    = []byte{0x00, 0x00, 0xFD}
+)
+
+var (
+	// ErrDataTooLarge indicates data exceeds the maximum length representable in a uint32.
+	ErrDataTooLarge = errors.New("data length exceeds maximum")
+	// ErrSizeMarkerTooShort indicates a size-marker payload is shorter than the expected
+	// 4-byte big-endian length.
+	ErrSizeMarkerTooShort = errors.New("size marker payload too short")
 )
 
 // ==================================================================
@@ -201,7 +210,7 @@ func newSendState(
 ) (*sendState, error) {
 	if uint64(len(data)) > math.MaxUint32 {
 		return nil, fmt.Errorf(
-			"data length %d exceeds maximum of %d bytes", len(data), uint32(math.MaxUint32),
+			"%w: got %d bytes, max %d", ErrDataTooLarge, len(data), uint32(math.MaxUint32),
 		)
 	}
 
@@ -414,7 +423,7 @@ func (r *recvState) processData(fwd *forwardInfo, ipHdrLen int) error {
 	switch kind { //nolint:exhaustive // markerNone is a no-op pass-through
 	case markerSize:
 		if len(payload) < sizePayloadLen {
-			return fmt.Errorf("size marker payload too short: %d bytes", len(payload))
+			return fmt.Errorf("%w: got %d bytes", ErrSizeMarkerTooShort, len(payload))
 		}
 
 		dec := make([]byte, sizePayloadLen)

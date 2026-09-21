@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/cipher"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -37,6 +38,9 @@ import (
 	"github.com/nblair2/dingopie/internal"
 	"github.com/nblair2/go-dnp3/v4/dnp3"
 )
+
+// ErrEchoMismatch indicates the outstation's echoed acknowledgement data did not match what was sent.
+var ErrEchoMismatch = errors.New("unexpected data received")
 
 // ==================================================================
 // COMMON
@@ -209,7 +213,7 @@ func clientExchangeAck(headers, data [][]byte) error {
 
 	for i, d := range data {
 		if !slices.Equal(d, recvData[i]) {
-			return fmt.Errorf("unexpected data received %v, expected %v", recvData[i], d)
+			return fmt.Errorf("%w: got %v, expected %v", ErrEchoMismatch, recvData[i], d)
 		}
 	}
 

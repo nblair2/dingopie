@@ -16,6 +16,28 @@ const (
 )
 
 var (
+	// ErrOddHeaderDataPairs indicates MakeDNP3Bytes was called with an odd number of
+	// header/data arguments, which cannot be split into header/data pairs.
+	ErrOddHeaderDataPairs = errors.New("data slices must be in pairs of header and data")
+	// ErrUnsupportedQualifier indicates a DNP3 object header requests a Qualifier Field
+	// other than 0 (packed without prefix, 1-octet start and stop indices), which is the
+	// only qualifier field dingopie currently supports for encoding.
+	ErrUnsupportedQualifier = errors.New("only Qualifier Field 0 is supported")
+	// ErrUnexpectedData indicates data was provided for a DNP3 object header that does not
+	// take data (eg: a class read header).
+	ErrUnexpectedData = errors.New("data provided for signal that does not take data")
+	// ErrIncompleteFrame indicates trailing bytes remained after parsing all complete DNP3
+	// frames out of a buffer.
+	ErrIncompleteFrame = errors.New("incomplete DNP3 frame")
+	// ErrDataNotPadded indicates data intended for a DNP3 object is not a multiple of that
+	// object's point size.
+	ErrDataNotPadded = errors.New("data length not padded to point size")
+	// ErrTooManyObjects indicates data would encode to more than 255 DNP3 objects, which
+	// exceeds the 1-octet start/stop index range supported by Qualifier Field 0.
+	ErrTooManyObjects = errors.New("data results in too many objects, exceeds max of 255")
+)
+
+var (
 	// DNP3ReadClass1 object header - 3 bytes, no data.
 	DNP3ReadClass1 = []byte{
 		0x3C, 0x02, 0x06, // class 1
@@ -268,7 +290,7 @@ ObjectsLoop:
 		headers = append(headers, nil)
 		data = append(data, objData)
 
-		return headers, data, errors.New("unknown DNP3 application object header")
+		return headers, data, fmt.Errorf("unknown DNP3 application object header: %w", dnp3.ErrUnsupportedObject)
 	}
 
 	return headers, data, nil
@@ -284,7 +306,7 @@ func SplitDNP3Frames(data []byte) ([][]byte, error) {
 	}
 
 	if len(leftover) > 0 {
-		return nil, fmt.Errorf("incomplete DNP3 frame: %d trailing bytes", len(leftover))
+		return nil, fmt.Errorf("%w: %d trailing bytes", ErrIncompleteFrame, len(leftover))
 	}
 
 	frames := make([][]byte, len(parsed))
@@ -304,7 +326,7 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 	var result []byte
 
 	if len(headerDataPairs)%2 != 0 {
-		return nil, errors.New("data slices must be in pairs of header and data")
+		return nil, ErrOddHeaderDataPairs
 	}
 
 	for i := 0; i < len(headerDataPairs); i += 2 {
@@ -313,14 +335,18 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 
 		pointSize, ok := pointSizeMap[string(header)]
 		if !ok {
-			return nil, fmt.Errorf("unknown object header %v", header)
+			return nil, fmt.Errorf(
+				"unknown object header %v: %w",
+				header,
+				dnp3.ErrUnsupportedObject,
+			)
 		}
 
 		result = append(result, header...)
 
 		if pointSize != 0 {
 			if header[2] != 0x00 {
-				return nil, errors.New("only Qualifier Field 0 is supported")
+				return nil, ErrUnsupportedQualifier
 			}
 
 			start, end, err := calculateStartEndIndices(data, pointSize)
@@ -331,7 +357,7 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 			result = append(result, start, end)
 			result = append(result, data...)
 		} else if len(data) > 0 {
-			return nil, errors.New("data provided for signal that does not take data")
+			return nil, ErrUnexpectedData
 		}
 	}
 
@@ -358,7 +384,8 @@ func MakeDNP3Bytes(frame *dnp3.Frame, headerDataPairs ...[]byte) ([]byte, error)
 func calculateStartEndIndices(data []byte, pointSize int) (byte, byte, error) {
 	if len(data)%pointSize != 0 {
 		return 0, 0, fmt.Errorf(
-			"data length %d not padded to multiple of %d",
+			"%w: data length %d not a multiple of %d",
+			ErrDataNotPadded,
 			len(data),
 			pointSize,
 		)
@@ -367,7 +394,8 @@ func calculateStartEndIndices(data []byte, pointSize int) (byte, byte, error) {
 	size := len(data) / pointSize
 	if size > 255 {
 		return 0, 0, fmt.Errorf(
-			"data length %d results in %d objects, exceeds max of 255",
+			"%w: data length %d results in %d objects",
+			ErrTooManyObjects,
 			len(data),
 			size,
 		)

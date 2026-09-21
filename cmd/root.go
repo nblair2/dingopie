@@ -40,6 +40,14 @@ const (
 	receiveFileMode      = 0o400
 )
 
+// Errors returned while gathering CLI input data.
+var (
+	// ErrNoData indicates no data was provided to send via file, stdin, or arguments.
+	ErrNoData = errors.New("no data provided to send")
+	// ErrTooManyArgs indicates more than one positional argument was provided as message data.
+	ErrTooManyArgs = errors.New("too many arguments provided")
+)
+
 // ==================================================================
 // Flag Vars
 // ==================================================================
@@ -90,7 +98,7 @@ func getData(cmd *cobra.Command, file string, args []string) ([]byte, error) {
 		}
 
 		if len(b) == 0 {
-			return nil, errors.New("no data provided to send (stdin empty)")
+			return nil, fmt.Errorf("%w (stdin empty)", ErrNoData)
 		}
 
 		cmd.Printf(">> Message read from stdin\n")
@@ -105,10 +113,10 @@ func getData(cmd *cobra.Command, file string, args []string) ([]byte, error) {
 
 		return data, nil
 	} else if len(args) > 1 {
-		return nil, errors.New("too many arguments provided")
+		return nil, ErrTooManyArgs
 	}
 
-	return nil, errors.New("no data provided to send")
+	return nil, ErrNoData
 }
 
 // openOutFile opens the file flag path for exclusive writing.
