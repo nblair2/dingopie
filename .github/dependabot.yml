@@ -6,6 +6,10 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: "gomod"
     directory: "/"
@@ -13,3 +17,15 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    groups:
+      netfilter:
+        patterns:
+          - "github.com/florianl/go-nfqueue*"
+          - "github.com/coreos/go-iptables"
+      cli:
+        patterns:
+          - "github.com/spf13/*"
+      packets:
+        patterns:
+          - "github.com/nblair2/go-dnp3*"
+          - "github.com/gopacket/gopacket"
