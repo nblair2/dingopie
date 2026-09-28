@@ -6,15 +6,15 @@
 // Data Scheme:
 //   - Data from the Client (DNP3 Master) uses Direct Operate No Ack requests. This allows large chunks of data to be
 //     sent, and avoids traditional 'ACKs' that come with Select/Operate or Direct Operate requests. Each frame will
-//     have a single Group 41 Variation 2 (Binary Output Status) object containing the size of the data being sent
-//     (5 byte header, 2 bytes of length + 1 byte event status). The payload is sent in Group 41 Variation 1 (Binary
-//     Output Command) objects (5 byte header, N*(4 bytes of data + 1 byte event status)). In both, event status
-//     bytes are set to 0x00 to satisfy DNP3 object structure requirements (packing data in here would show strange
-//     statuses and potentially use a reserved bit).
+//     have a single Group 41 Variation 2 (16-bit Analog Output Command) object containing the size of the data being
+//     sent (5 byte header, 2 bytes of length + 1 byte command status). The payload is sent in Group 41 Variation 1
+//     (32-bit Analog Output Command) objects (5 byte header, N*(4 bytes of data + 1 byte command status)). In both,
+//     command status bytes are set to 0x00 (SUCCESS), rather than used to carry data.
 //   - Data from the Server (DNP3 Outstation) uses Unsolicited Response messages. This prevents the need for waiting
 //     for a read request from the client before sending data. Each frame will have a single Group 30 Variation 4
-//     (Analog Output Status) object containing the size of the data being sent (5 byte header + 2 bytes of length).
-//     The payload is sent in Group 30 Variation 3 (Analog Output Command) objects (5 byte header, N*4 bytes of data).
+//     (16-bit Analog Input without flags) object containing the size (5 byte header + 2 bytes of length).
+//     The payload is sent in Group 30 Variation 3 (32-bit Analog Input without flags) objects
+//     (5 byte header, N*4 bytes of data).
 package shell
 
 import (
@@ -56,7 +56,7 @@ var ErrDataTooLarge = errors.New("data length exceeds max data length")
 var (
 	// maxDataLen constricts data in each packet to one DNP3 frame so that we don't split data across frames.
 	serverMaxDataLen = 232 // 256 + 5 'free' DL bytes - 'overhead' (DL + T + A + our length object + data header)
-	clientMaxDataLen = 184 // 80% of above, because each data object needs an extra event status byte
+	clientMaxDataLen = 184 // 80% of above, because each data point needs an extra command status byte
 	// Signal bytes for DNP3 messages
 	// Primary (client -> server).
 	reqSendSize = internal.DNP3G41V2Q0
@@ -212,7 +212,7 @@ func (ds dnp3Stream) Write(data []byte) (int, error) {
 
 		encData := make([]byte, len(padded))
 		ds.txCipher.XORKeyStream(encData, padded)
-		// If this is a client to server, the points need an extra event status byte
+		// If this is a client to server, the points need an extra command status byte
 		if ds.primary {
 			sizeBytes, err = internal.InsertPeriodicBytes(
 				sizeBytes,
@@ -280,7 +280,7 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 	sizeBytes := rxData[0]
 	cleanData := bytes.Join(rxData[1:], nil)
 
-	// if receiving from client, remove object event status bytes
+	// if receiving from client, remove object command status bytes
 	if !ds.primary {
 		sizeBytes, err = internal.RemovePeriodicBytes(
 			sizeBytes,

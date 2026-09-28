@@ -3,23 +3,23 @@
 // The size allows the server to strip any padding after the transfer is complete. After this 'handshake' the client
 // periodically sends 'Send Data' requests to the server. The interval between these requests is configurable, with
 // the 'wait' flag. The client also determines the size of each data 'chunk' to send with the 'points' flag. The
-// server responds to each requests by echoing the same data back (acknowledging the CROB). Once the client has
-// transferred all of its data (and perhaps a little padding), it sends a disconnect message containing some random
-// bytes. The server acks the disconnect and the connection is closed.
+// server responds to each request by echoing the same data back (acknowledging the analog output command). Once the
+// client has transferred all of its data (and perhaps a little padding), it sends a ReadClass123 disconnect request.
+// The server acks the disconnect with random data and the connection is closed.
 //
 // The sequence of messages is as follows:
 //
 //		(master)--- ReadClass1230  -->(outstation)  Initiate connection
 //		(master)<-- G30V4Q0 + rand ---(outstation)  Ack with random
 //		(master)--- G41V2Q0 + size ---(outstation)  Send Size
-//		(master)<-- G41V2Q0 + rand ---(outstation)  Ack with random
+//		(master)<-- G41V2Q0 + size ---(outstation)  Ack Size
 //	Loop:
 //		(master)--- G41V1Q0 + data -->(outstation)  Send Data
 //		(master)<-- G41V1Q0 + data ---(outstation)  Ack Data
 //		     ...
 //	 End:
 //		(master)--- ReadClass123   -->(outstation)  Disconnect
-//		(master)<-- G30V1Q0 + rand ---(outstation)  AckDisconnect
+//		(master)<-- G30V3Q0 + rand ---(outstation)  AckDisconnect
 package primary
 
 import (

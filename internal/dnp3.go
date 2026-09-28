@@ -103,34 +103,34 @@ var (
 		// n * 2 bytes of data
 	}
 
-	// DNP3G41V1Q0 object header G41, V1, QF 1 - Analog Output 32 bit.
+	// DNP3G41V1Q0 object header G41, V1, QF 0 - Analog Output Command 32 bit with command status.
 	DNP3G41V1Q0 = []byte{
 		0x29, // Group 41
 		0x01, // Variation 1
 		0x00, // Qualifier Fields 0: packed without prefix, 1-octet start and stop indices
 		// Start Index
 		// Stop Index
-		// n * 4 bytes of data
+		// n * (4 bytes of data + 1 byte command status)
 	}
 
-	// DNP3G41V2Q0 object header G41, V2, QF 0 - Analog Output 16 bit.
+	// DNP3G41V2Q0 object header G41, V2, QF 0 - Analog Output Command 16 bit with command status.
 	DNP3G41V2Q0 = []byte{
 		0x29, // Group 41
 		0x02, // Variation 2
 		0x00, // Qualifier Fields 0: packed without prefix, 1-octet start and stop indices
 		// Start Index
 		// Stop Index
-		// n * 3 bytes of data
+		// n * (2 bytes of data + 1 byte command status)
 	}
 
-	// DNP3G41V3Q0 object header G41, V3, QF 1 - Analog Output single precision float with flag.
+	// DNP3G41V3Q0 object header G41, V3, QF 0 - Analog Output Command single precision float with command status.
 	DNP3G41V3Q0 = []byte{
 		0x29, // Group 41
 		0x03, // Variation 3
 		0x00, // Qualifier Fields 0: packed without prefix, 1-octet start and stop indices
 		// Start Index
 		// Stop Index
-		// n * (1 byte flag + 4 bytes of data) TODO check this
+		// n * (4 bytes of data + 1 byte command status)
 	}
 
 	// DNP3G0V0QFA object header G0, V0, QFA - Invalid object.
@@ -179,7 +179,7 @@ var pointSizeMap = map[string]int{
 	string(DNP3G30V4Q0):    2,
 	string(DNP3G30V3Q0):    4,
 	string(DNP3G30V1Q0):    5, // 4 bytes data + 1 byte flag
-	string(DNP3G41V2Q0):    3, // 2 bytes data + 1 byte flag
+	string(DNP3G41V2Q0):    3, // 2 bytes data + 1 byte command status
 	string(DNP3G41V1Q0):    5,
 	string(DNP3G41V3Q0):    5,
 }

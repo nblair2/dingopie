@@ -56,9 +56,9 @@ const (
 )
 
 var (
-	sizeMarker   = []byte{0x00, 0x00, 0xFA}
-	injectMarker = []byte{0x00, 0x00, 0xFC}
-	endMarker    = []byte{0x00, 0x00, 0xFD}
+	sizeMarker   = internal.DNP3G0V0QFA
+	injectMarker = internal.DNP3G0V0QFC
+	endMarker    = internal.DNP3G0V0QFD
 )
 
 var (
