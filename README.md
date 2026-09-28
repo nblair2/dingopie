@@ -114,14 +114,14 @@ Title: Primary
         s->>c: AckData (G41V1)
     end
     c-->>s: Disconnect (ReadClass123)
-    s->>c: AckDisconnect (G30V1Q0)
+    s->>c: AckDisconnect (G30V3Q0)
 ```
 
 #### Secondary (`server direct send`, `client direct receive`)
 
 > Example [secondary.pcapng.gz](.media/secondary.pcapng.gz)
 
-Secondary is the opposite of primary (both in the DNP3 spec and for dingopie). This sequence is used for transferring data from a `server` to a `client`. It uses DNP3 Response messages and Group 30, Variation 1 (Analog Input - 32 bit) objects to transfer data. This is essentially the data acquisition in SCA**DA**, and therefore much closer to what a normal DNP3 connection looks like. When configured to run at low speeds (`--wait 5s`) and with a small number of objects (`--objects 5`), this sequence would be the closest to legitimate DNP3 traffic.
+Secondary is the opposite of primary (both in the DNP3 spec and for dingopie). This sequence is used for transferring data from a `server` to a `client`. It uses DNP3 Response messages and Group 30, Variation 3 (Analog Input - 32 bit without flags) objects to transfer data. This is essentially the data acquisition in SCA**DA**, and therefore much closer to what a normal DNP3 connection looks like. When configured to run at low speeds (`--wait 5s`) and with a small number of objects (`--objects 5`), this sequence would be the closest to legitimate DNP3 traffic.
 
 ```mermaid
 sequenceDiagram
@@ -142,7 +142,7 @@ Title: Secondary
 
 > Example [shell.pcapng.gz](.media/shell.pcapng.gz)
 
-The shell sequence is used for bi-directional data streaming between a `client` and `server` to support an interactive shell. It is the same regardless of which role is running which action. This sequence has some of the same characteristics as the primary and secondary sequences described above, with modification to make the communications simpler and faster. Data sent from `client` to `server` still uses Group 41 Variation 1 (Analog Output Command - 32 bit) objects, but the `server` now uses Direct Operate No Ack Commands to eliminate the need for the `server` to echo back each message. Data sent from `server` to `client` still uses Group 30 Variation 1 (Analog Input - 32 bit) objects, but the responses are now Unsolicited Responses, so that the `server` can send data as soon as it is available instead of waiting for a poll from the `client`. This traffic pattern is strange for DNP3, but required for an interactive shell.
+The shell sequence is used for bi-directional data streaming between a `client` and `server` to support an interactive shell. It is the same regardless of which role is running which action. This sequence has some of the same characteristics as the primary and secondary sequences described above, with modification to make the communications simpler and faster. Data sent from `client` to `server` still uses Group 41 Variation 1 (Analog Output Command - 32 bit) objects, but the `client` now uses Direct Operate No Ack Commands to eliminate the need for the `server` to echo back each message. Data sent from `server` to `client` still uses Group 30 Variation 3 (Analog Input - 32 bit without flags) objects, but the responses are now Unsolicited Responses, so that the `server` can send data as soon as it is available instead of waiting for a poll from the `client`. This traffic pattern is strange for DNP3, but required for an interactive shell.
 
 ```mermaid
 sequenceDiagram
