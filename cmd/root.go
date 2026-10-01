@@ -58,6 +58,7 @@ var (
 	key        string
 
 	// direct send/receive.
+	proxyURL      string
 	wait          time.Duration
 	file          string
 	points        int

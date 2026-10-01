@@ -32,7 +32,6 @@ import (
 	"io"
 	"net"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
@@ -80,7 +79,7 @@ type recvResult struct {
 
 // ClientSend - dingopie client direct send.
 func ClientSend(out io.Writer, ip string, port int,
-	key string,
+	proxyURL, key string,
 	data []byte,
 	points int, pointVariance float32,
 	wait time.Duration,
@@ -96,12 +95,7 @@ func ClientSend(out io.Writer, ip string, port int,
 
 	frame = internal.NewDNP3RequestFrame()
 
-	//nolint:exhaustruct_v5 // zero-value Dialer, just need DialContext for noctx
-	conn, err := (&net.Dialer{}).DialContext(
-		context.Background(),
-		"tcp",
-		net.JoinHostPort(ip, strconv.Itoa(port)),
-	)
+	conn, err := internal.DialTCP(ip, port, proxyURL)
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
 	}

@@ -321,13 +321,8 @@ func (ds dnp3Stream) processFrame(frame []byte) ([]byte, error) {
 // ==================================================================
 
 // ClientConnect - dingopie client direct connect.
-func ClientConnect(out io.Writer, ip string, port int, key string) error {
-	//nolint:exhaustruct_v5 // zero-value Dialer, just need DialContext for noctx
-	conn, err := (&net.Dialer{}).DialContext(
-		context.Background(),
-		"tcp",
-		net.JoinHostPort(ip, strconv.Itoa(port)),
-	)
+func ClientConnect(out io.Writer, ip string, port int, proxyURL, key string) error {
+	conn, err := internal.DialTCP(ip, port, proxyURL)
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
 	}

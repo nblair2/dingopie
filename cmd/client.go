@@ -61,6 +61,7 @@ var clientDirectSendCmd = &cobra.Command{
 			cmd.OutOrStdout(),
 			serverIP,
 			serverPort,
+			proxyURL,
 			key,
 			data,
 			points,
@@ -82,7 +83,14 @@ var clientDirectReceiveCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		f := openOutFile(cmd)
 
-		data, err := secondary.ClientReceive(cmd.OutOrStdout(), serverIP, serverPort, key, wait)
+		data, err := secondary.ClientReceive(
+			cmd.OutOrStdout(),
+			serverIP,
+			serverPort,
+			proxyURL,
+			key,
+			wait,
+		)
 		if err != nil {
 			cmd.Printf(
 				"Error with direct receive: %v\nAttempting to output what data we have\n",
@@ -99,7 +107,7 @@ var clientDirectShellCmd = &cobra.Command{
 	Use:     useShell,
 	Short:   "run a pty shell on this device",
 	Run: func(cmd *cobra.Command, _ []string) {
-		err := shell.ClientShell(cmd.OutOrStdout(), serverIP, serverPort, key, command)
+		err := shell.ClientShell(cmd.OutOrStdout(), serverIP, serverPort, proxyURL, key, command)
 		if err != nil {
 			cmd.Printf("Error with direct shell: %v\n", err)
 			os.Exit(1)
@@ -112,7 +120,7 @@ var clientDirectConnectCmd = &cobra.Command{
 	Use:     useConnect,
 	Short:   "connect to a pty shell running on server",
 	Run: func(cmd *cobra.Command, _ []string) {
-		err := shell.ClientConnect(cmd.OutOrStdout(), serverIP, serverPort, key)
+		err := shell.ClientConnect(cmd.OutOrStdout(), serverIP, serverPort, proxyURL, key)
 		if err != nil {
 			cmd.Printf("Error with direct connect: %v\n", err)
 			os.Exit(1)
@@ -163,6 +171,8 @@ func init() {
 	clientDirectCmd.AddCommand(clientDirectConnectCmd)
 	clientDirectCmd.PersistentFlags().
 		DurationVarP(&wait, "wait", "w", 1*time.Second, "wait time between DNP3 requests")
+	clientDirectCmd.PersistentFlags().
+		StringVar(&proxyURL, "proxy", "", "proxy URL (socks5://[user:password@]host:port)")
 	clientDirectSendCmd.PersistentFlags().
 		StringVarP(&file, "file", "f", "", "file to read data from (default is a positional argument)")
 	clientDirectReceiveCmd.PersistentFlags().
