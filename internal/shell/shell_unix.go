@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/creack/pty"
+	"github.com/nblair2/dingopie/internal"
 )
 
 // shell initiates an interactive shell session over the provided stream.
@@ -49,13 +50,8 @@ func shell(out io.Writer, command string, stream dnp3Stream, maxDataLen int) err
 }
 
 // ClientShell - dingopie client direct shell.
-func ClientShell(out io.Writer, ip string, port int, key, command string) error {
-	//nolint:exhaustruct_v5 // zero-value Dialer, just need DialContext for noctx
-	conn, err := (&net.Dialer{}).DialContext(
-		context.Background(),
-		"tcp",
-		net.JoinHostPort(ip, strconv.Itoa(port)),
-	)
+func ClientShell(out io.Writer, ip string, port int, proxyURL, key, command string) error {
+	conn, err := internal.DialTCP(ip, port, proxyURL)
 	if err != nil {
 		return fmt.Errorf("error connecting: %w", err)
 	}

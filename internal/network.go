@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"slices"
+	"strconv"
 
 	"github.com/nblair2/go-dnp3/v4/dnp3"
+	"golang.org/x/net/proxy"
 )
 
 // TCPReadBufferSize is the buffer length used when reading from a TCP connection.
@@ -25,7 +28,38 @@ var (
 	// ErrUnexpectedSignal indicates a received DNP3 object header did not match the header
 	// expected at that position.
 	ErrUnexpectedSignal = errors.New("unexpected signal received")
+	// ErrProxyHostRequired indicates the proxy URL does not specify a host.
+	ErrProxyHostRequired = errors.New("proxy URL must include a host")
 )
+
+// DialTCP connects directly or through a SOCKS5 proxy, leaving destination DNS resolution to the proxy.
+func DialTCP(ip string, port int, proxyURL string) (net.Conn, error) {
+	//nolint:exhaustruct_v5 // use the default TCP dialer
+	var dialer proxy.Dialer = &net.Dialer{}
+
+	if proxyURL != "" {
+		u, err := url.Parse(proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing proxy URL: %w", err)
+		}
+
+		if u.Hostname() == "" {
+			return nil, ErrProxyHostRequired
+		}
+
+		dialer, err = proxy.FromURL(u, dialer)
+		if err != nil {
+			return nil, fmt.Errorf("error configuring proxy: %w", err)
+		}
+	}
+
+	conn, err := dialer.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	if err != nil {
+		return nil, fmt.Errorf("error dialing TCP: %w", err)
+	}
+
+	return conn, nil
+}
 
 // ClientHandleConn manages a client (DNP3 master) connection, in pairs of write/read.
 func ClientHandleConn(conn net.Conn, write <-chan []byte, read chan<- []byte) error {

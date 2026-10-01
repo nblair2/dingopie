@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/nblair2/dingopie/internal"
@@ -195,18 +194,13 @@ func ClientReceive(
 	out io.Writer,
 	ip string,
 	port int,
-	key string,
+	proxyURL, key string,
 	wait time.Duration,
 ) ([]byte, error) {
 	frame = internal.NewDNP3RequestFrame()
 	rxCipher = internal.NewCipherStream(key)
 
-	//nolint:exhaustruct_v5 // zero-value Dialer, just need DialContext for noctx
-	conn, err := (&net.Dialer{}).DialContext(
-		context.Background(),
-		"tcp",
-		net.JoinHostPort(ip, strconv.Itoa(port)),
-	)
+	conn, err := internal.DialTCP(ip, port, proxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("error connecting: %w", err)
 	}
