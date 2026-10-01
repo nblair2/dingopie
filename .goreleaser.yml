@@ -11,11 +11,6 @@ builds:
     id: default
     env:
       - CGO_ENABLED=0
-      # Garble everything except for:
-      # go-packet   (takes too long)
-      # go-cmp      (only used in tests)
-      # cobra,pflag (uses reflection for commands)
-      - GOGARBLE=github.com/coreos/go-iptables,github.com/creack/pty,github.com/florianl/go-nfqueue/v2,github.com/nblair2/dingopie,github.com/nblair2/go-dnp3/v4,github.com/schollz/progressbar/v3,golang.org/x/term
     # Trick goreleaser into using garble as the build tool
     tool: garble
     command: "-literals"
@@ -44,6 +39,7 @@ builds:
       # https://github.com/golang/go/issues/70705
       - goos: windows
         goarch: arm
+
 
   - <<: *default_build
     id: 386-softfloat

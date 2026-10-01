@@ -2,11 +2,6 @@ name: ci
 
 on:
   pull_request:
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
@@ -164,7 +159,9 @@ jobs:
           path: dist/
       - name: Run tests
         run: |
-          $exe = (Resolve-Path .\dist\dingopie_windows_amd64_v1\dingopie.exe).Path
+          $exe = (Get-ChildItem -Path dist -Recurse -Filter dingopie.exe -File |
+            Where-Object { $_.Directory.Name -like '*windows*amd64*' } |
+            Select-Object -First 1).FullName
           $exe = $exe -replace '\\', '/'
           make ${{ matrix.test }} EXECUTABLE="$exe"
         shell: pwsh

@@ -5,7 +5,7 @@ param(
 $TestDir = Resolve-Path "$PSScriptRoot/.."
 Set-Location $TestDir
 
-$exePath = "..\dist\dingopie_windows_amd64\dingopie.exe" # Default relative to test/
+$exePath = "..\dist\dingopie_windows_amd64_v1\dingopie.exe" # Default relative to test/
 if ($env:EXECUTABLE) {
     $exePath = $env:EXECUTABLE
 }
