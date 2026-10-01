@@ -41,6 +41,9 @@ builds:
       - mipsle
       - mips64
       - mips64le
+    go386:
+      - softfloat
+      - sse2
     goarm:
       - "5"
       - "6"
